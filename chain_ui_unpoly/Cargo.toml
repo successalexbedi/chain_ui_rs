@@ -1,0 +1,10 @@
+[package]
+name = "chain_ui_unpoly"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+axum.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+chain_ui_core.workspace = true

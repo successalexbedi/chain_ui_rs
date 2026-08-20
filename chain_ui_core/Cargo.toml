@@ -1,0 +1,7 @@
+[package]
+name = "chain_ui_core"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+owo-colors.workspace = true

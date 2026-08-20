@@ -1,0 +1,28 @@
+[workspace]
+members=[
+    "chain_ui_core", 
+    "chain_ui_htmx",
+    "chain_ui_alphine",
+    "chain_ui_unpoly", 
+    "chain_ui_macros", 
+    "chain_ui_test",
+]
+resolver="3"
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+
+[workspace.dependencies]
+owo-colors = "4"
+tokio = { version = "1", features = ["full"] }
+textwrap = { version = "0.16", features = ["terminal_size"] }
+syn = { version = "2", features = ["full"] }
+quote = "1"
+proc-macro2 = "1"
+axum = "0.7"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+chain_ui_core = { path = "chain_ui_core" }
+chain_ui_unpoly = { path = "chain_ui_unpoly" }
+chain_ui_macros = { path = "chain_ui_macros" }
