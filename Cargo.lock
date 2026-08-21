@@ -100,6 +100,7 @@ version = "0.1.0"
 name = "chain_ui_core"
 version = "0.1.0"
 dependencies = [
+ "chain_ui_macros",
  "owo-colors",
  "textwrap",
 ]

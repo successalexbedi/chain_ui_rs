@@ -6,3 +6,4 @@ edition.workspace = true
 [dependencies]
 owo-colors.workspace = true
 textwrap.workspace = true 
+chain_ui_macros.workspace = true

@@ -41,6 +41,13 @@ impl UpResponse {
         }
         self
     }
+    pub fn title(mut self, title: impl Into<String>) -> Self {
+    match serde_json::to_string(&title.into()) {
+        Ok(json) => self.headers.push(("X-Up-Title", json)),
+        Err(e) => { self.error.get_or_insert(e); }
+    }
+    self
+}
 }
 
 impl IntoResponseParts for UpResponse {

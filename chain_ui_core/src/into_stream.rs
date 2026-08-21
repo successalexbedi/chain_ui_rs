@@ -64,7 +64,8 @@ impl IntoStream for &str {
         escape_text(self, buf);
     }
 }
-impl IntoStream for String {
+
+impl IntoStream for &String {
     #[inline(always)]
     fn stream_to(self, buf: &mut StreamBuf) {
         escape_text(self.as_str(), buf);

@@ -12,6 +12,7 @@ pub mod cache;
 pub mod tags;
 pub(crate) mod tag_dict;   // renamed from tag.rs to avoid clashing with tags::tag
 pub mod panic;
+pub use chain_ui_macros::context;
 
 pub use tags::{tag, svg};
 pub use element::{Element, VoidElement};
