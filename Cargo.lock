@@ -108,6 +108,12 @@ dependencies = [
 [[package]]
 name = "chain_ui_htmx"
 version = "0.1.0"
+dependencies = [
+ "axum",
+ "chain_ui_core",
+ "serde",
+ "serde_json",
+]
 
 [[package]]
 name = "chain_ui_macros"

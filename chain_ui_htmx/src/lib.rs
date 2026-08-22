@@ -1,14 +1,17 @@
-pub fn add(left: u64, right: u64) -> u64 {
-    left + right
-}
+pub mod attrs;
+pub mod action;
+pub mod headers;
+pub mod cdn;
+pub mod csrf;
 
-#[cfg(test)]
-mod tests {
-    use super::*;
+#[macro_use]
+mod macros;
 
-    #[test]
-    fn it_works() {
-        let result = add(2, 2);
-        assert_eq!(result, 4);
-    }
-}
+pub use attrs::HxExt;
+pub use action::{ChainAction, ChainExt, Swap, get, post, put, patch, delete};
+pub use headers::HxResponse;
+pub use cdn::{htmx_cdn, htmx_cdn_pinned};
+pub use csrf::csrf_bootstrap;
+pub use chain_ui_core::PageShell;
+
+pub mod prelude;

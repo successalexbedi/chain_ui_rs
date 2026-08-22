@@ -20,4 +20,6 @@ pub use into_stream::{ChainMarkup, HtmlElement, IntoStream, RawHtml, raw_html};
 pub use strings::{ChainStr, FallbackWriter};
 pub use scope::ScopeGuard;
 
+pub mod shell;
+pub use shell::PageShell;
 pub mod prelude;

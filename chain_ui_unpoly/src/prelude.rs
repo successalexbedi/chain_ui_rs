@@ -8,5 +8,5 @@ pub use crate::cdn::{unpoly_cdn, unpoly_cdn_pinned};
 pub use crate::boot::unpoly_boot; 
 pub use crate::csrf::csrf_bootstrap;
 pub use crate::validate::validating_field;
-pub use crate::shell::PageShell;
+pub use chain_ui_core::PageShell;
 pub use crate::{up_page, up_page_with_user};
