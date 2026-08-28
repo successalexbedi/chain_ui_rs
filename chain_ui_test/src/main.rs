@@ -2,9 +2,9 @@ use axum::{
     extract::{Extension, Path, Request},
     http::HeaderMap,
     middleware::{self, Next},
-    response::{Html, IntoResponse, Redirect},
-    routing::{get, post},
-    Form, Router,
+    response::{Html, Redirect},
+    routing::get,
+    Router,
 };
 use chain_ui_core::prelude::*;
 use chain_ui_unpoly::prelude::*;
@@ -12,14 +12,14 @@ use chain_ui_unpoly::prelude::*;
 struct AppShell;
 impl PageShell for AppShell {
     fn wrap(title: &str, content: Element) -> Element {
-        tag::html().child(
-            tag::head()
-                .child(tag::title().child(title))
-                .child(unpoly_cdn())
-                .child(csrf_bootstrap("test-csrf-token-123")),
-        ).child(
-            tag::body().attr("up-main", "").child(content)
-        )
+        tag::html()
+            .child(
+                tag::head()
+                    .child(tag::title().child(title))
+                    .child(unpoly_cdn())
+                    .child(csrf_bootstrap("test-csrf-token-123")),
+            )
+            .child(tag::body().attr("up-main", "").child(content))
     }
 }
 
@@ -27,10 +27,15 @@ impl PageShell for AppShell {
 // dictate session vs JWT vs anything else. It just needs to insert
 // this exact type into request extensions on success.
 #[derive(Clone)]
-struct AuthedUser { name: String }
+struct AuthedUser {
+    name: String,
+}
 
 async fn require_auth(mut req: Request, next: Next) -> Result<axum::response::Response, Redirect> {
-    let user = req.uri().query().unwrap_or("")
+    let user = req
+        .uri()
+        .query()
+        .unwrap_or("")
         .split('&')
         .find_map(|p| p.strip_prefix("user="))
         .map(|n| AuthedUser { name: n.to_string() });
@@ -46,7 +51,11 @@ async fn require_auth(mut req: Request, next: Next) -> Result<axum::response::Re
 
 #[context(book, Book)]
 #[derive(Clone)]
-struct Book { title: String, author: String, tags: Vec<String> }
+struct Book {
+    title: String,
+    author: String,
+    tags: Vec<String>,
+}
 
 async fn fetch_book(id: u32) -> Book {
     Book {
@@ -69,7 +78,8 @@ fn book_detail_widget() -> Element {
         })
 }
 
-fn home_builder() -> (&'static str, Element) {
+// --- no extras at all ---
+async fn home_builder() -> (&'static str, Element) {
     let content = tag::div()
         .class("home")
         .child(tag::h1().child("Chain UI Test"))
@@ -80,6 +90,18 @@ fn home_builder() -> (&'static str, Element) {
 }
 up_page!(home_page, home_builder);
 
+// --- "user" is just an extra extractor, same as pool would be ---
+async fn settings_builder(Extension(user): Extension<AuthedUser>) -> (&'static str, Element) {
+    let content = tag::div()
+        .id("main")
+        .child(tag::h1().child("Settings"))
+        .child(tag::p().child(chain_fmt!("Logged in as: {}", user.name)));
+    ("Settings", content)
+}
+up_page!(settings_page, settings_builder, user: Extension<AuthedUser>);
+
+// book_page stays hand-written — it uses #[context(...)] with
+// with_book(...).await, which the macro isn't built to wrap.
 async fn book_page(Path(id): Path<u32>, headers: HeaderMap) -> Html<String> {
     let book = fetch_book(id).await;
     let html = with_book(book, async {
@@ -89,18 +111,10 @@ async fn book_page(Path(id): Path<u32>, headers: HeaderMap) -> Html<String> {
         } else {
             AppShell::wrap("Book Detail", content)
         }
-    }).await;
+    })
+    .await;
     Html(html.build().into_string())
 }
-
-fn settings_builder(user: &AuthedUser) -> (&'static str, Element) {
-    let content = tag::div()
-        .id("main")
-        .child(tag::h1().child("Settings"))
-        .child(tag::p().child(chain_fmt!("Logged in as: {}", user.name)));
-    ("Settings", content)
-}
-up_page_with_user!(settings_page, settings_builder);
 
 #[tokio::main]
 async fn main() {

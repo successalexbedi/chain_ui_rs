@@ -19,3 +19,5 @@ pub use csrf::csrf_bootstrap;
 pub use validate::validating_field;
 
 pub mod prelude;
+pub mod error;
+pub use error::{PageError, PageResult, IntoPageResult};

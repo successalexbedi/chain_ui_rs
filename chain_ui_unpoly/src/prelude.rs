@@ -9,4 +9,5 @@ pub use crate::boot::unpoly_boot;
 pub use crate::csrf::csrf_bootstrap;
 pub use crate::validate::validating_field;
 pub use chain_ui_core::PageShell;
-pub use crate::{up_page, up_page_with_user};
+pub use crate::error::{PageError, PageResult, IntoPageResult};
+pub use crate::up_page;
