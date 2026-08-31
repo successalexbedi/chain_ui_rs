@@ -2,8 +2,8 @@
 // SECTION 5 — COMPOSABILITY CORE: IntoStream & ChainMarkup
 // -----------------------------------------------------------------------
 // This trait is the entire composability mechanism. Anything that
-// implements it can be passed to .child()/.children(). A fully built
-// Element flattens its own buffer into whatever buffer it's handed —
+// implements it can be passed to .child(). A fully built Element
+// flattens its own buffer into whatever buffer it's handed —
 // replacing external layout template dependencies entirely.
 // =====================================================================
 
@@ -22,8 +22,6 @@ pub trait IntoStream {
     fn stream_to(self, buf: &mut StreamBuf);
 }
 
-/// A lightweight native replacement wrapper for standard markup structures
-/// providing high performance HTML storage without third party dependencies.
 pub struct ChainMarkup(pub String);
 
 impl ChainMarkup {
@@ -40,10 +38,7 @@ impl std::fmt::Display for ChainMarkup {
 }
 
 /// The raw-HTML escape hatch. Pushes content directly with NO
-/// escaping. Only ever use this with content you already trust —
-/// pre-rendered Markdown output, a sanitized SVG string, or similar.
-/// Never pass raw user input here; that's exactly the injection hole
-/// the rest of this engine exists to close.
+/// escaping. Only ever use this with content you already trust.
 pub struct RawHtml(pub ChainStr);
 
 impl IntoStream for RawHtml {
@@ -64,7 +59,12 @@ impl IntoStream for &str {
         escape_text(self, buf);
     }
 }
-
+impl IntoStream for String {
+    #[inline(always)]
+    fn stream_to(self, buf: &mut StreamBuf) {
+        escape_text(self.as_str(), buf);
+    }
+}
 impl IntoStream for &String {
     #[inline(always)]
     fn stream_to(self, buf: &mut StreamBuf) {
@@ -99,11 +99,6 @@ impl IntoStream for () {
     fn stream_to(self, _buf: &mut StreamBuf) {}
 }
 
-// =====================================================================
-// Enables closures like .child(|| { for i in items { ... } }) — this
-// is the mechanism behind dropping @for/child_for in favor of plain
-// Rust loops, discussed earlier.
-// =====================================================================
 impl<F, R> IntoStream for F
 where
     F: FnOnce() -> R,
@@ -114,13 +109,11 @@ where
         let result = {
             let _guard = ScopeGuard::enter(buf);
             self()
-        }; // guard dropped here, buf's borrow released before reuse below
+        };
         result.stream_to(buf);
     }
-}	
+}
 
-/// Lets .child() accept a tuple of multiple things at once, streamed
-/// in order — e.g. .child((header(), body(), footer())).
 macro_rules! impl_tuple_stream {
     ($($name:ident)+) => {
         impl<$($name: IntoStream),+> IntoStream for ($($name,)+) {
@@ -131,7 +124,7 @@ macro_rules! impl_tuple_stream {
                 $($name.stream_to(buf);)+
             }
         }
-    };												
+    };
 }
 
 impl_tuple_stream!(A);
@@ -141,9 +134,11 @@ impl_tuple_stream!(A B C D);
 impl_tuple_stream!(A B C D E);
 impl_tuple_stream!(A B C D E F);
 
-/// Shared behavior needed by the attribute macro so
-/// .class()/.attr()/.flag() can be written once and apply to both
-/// Element and VoidElement.
+#[diagnostic::on_unimplemented(
+    message = "`{Self}` doesn't support Chain UI's attribute methods (.class/.attr/.flag/...)",
+    label = "doesn't implement `HtmlElement`",
+    note = "Only `Element` and `VoidElement` implement this — it's internal plumbing, not something you implement yourself."
+)]
 pub trait HtmlElement {
     fn stream(&mut self) -> &mut StreamBuf;
     fn is_head_closed(&self) -> bool;

@@ -126,9 +126,12 @@ impl IntoStream for Element {
     #[inline(always)]
     fn stream_to(mut self, buf: &mut StreamBuf) {
         self.finalize();
-        if !append_to_active(&self.buf) {
-            buf.push_str(self.buf.as_str());
-        }
+        // FIX: always push into the real, explicit parent buffer.
+        // The active-loop-scope redirect belongs ONLY in Drop, below —
+        // putting it here too was hijacking normal, correctly-attached
+        // .child() calls happening inside any surrounding
+        // .child(|| { for ... }) loop, flattening the whole tree.
+        buf.push_str(self.buf.as_str());
     }
 }
 
@@ -223,7 +226,12 @@ impl VoidElement {
     #[inline(always)]
     fn finalize(&mut self) {
         if !self.emitted {
-            self.buf.push_str(">");
+            // FIX: self-close with " />" instead of ">" — required for
+            // SVG/foreign-content elements (path, circle, line, etc.)
+            // to parse correctly as empty tags. Safe for true HTML void
+            // elements too (br, img, input...) since browsers ignore
+            // the trailing slash on those regardless.
+            self.buf.push_str(" />");
             self.emitted = true;
         }
     }
@@ -245,9 +253,8 @@ impl IntoStream for VoidElement {
     #[inline(always)]
     fn stream_to(mut self, buf: &mut StreamBuf) {
         self.finalize();
-        if !append_to_active(&self.buf) {
-            buf.push_str(self.buf.as_str());
-        }
+        // Same fix as Element::stream_to — always push to the real parent.
+        buf.push_str(self.buf.as_str());
     }
 }
 
