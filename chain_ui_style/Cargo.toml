@@ -1,0 +1,8 @@
+[package]
+name = "chain_ui_style"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+chain_ui_core = { workspace = true }
+chain_ui_style_macros = { workspace = true }
