@@ -16,6 +16,11 @@ use crate::escape::escape_attr;
 use crate::into_stream::HtmlElement;
 use crate::strings::ChainStr;
 
+pub trait ClassMarker {
+    const NAME: &'static str;
+}
+
+
 macro_rules! impl_attr_methods {
     ($t:ty) => {
         impl $t {
@@ -239,10 +244,57 @@ macro_rules! impl_attr_methods {
             // ---------------------------------------------------------
 
             #[inline(always)]
-            pub fn style_attr(self, css: impl Into<ChainStr>) -> Self {
-                self.attr("style", css)
-            }
+            
+#[track_caller]
+pub fn style_attr(mut self, css: impl Into<ChainStr>) -> Self {
+    let c_val = css.into();
 
+    if self.is_head_closed() {
+        let loc = std::panic::Location::caller();
+        chain_panic!(
+            format!("<{}>", self.tag),
+            format!(
+                "Tried to set inline style after this element already has children.\n \
+                 Move this .style_attr()/.css_var() call to before the first .child() call.\n  \
+                 at {}:{}",
+                loc.file(), loc.line()
+            )
+        );
+    }
+
+    if self.has_style() {
+        self.stream().pop();
+        self.stream().push_str(" ");
+        escape_attr(c_val.as_str(), self.stream());
+        self.stream().push_str("\"");
+    } else {
+        self.stream().push_str(" style=\"");
+        escape_attr(c_val.as_str(), self.stream());
+        self.stream().push_str("\"");
+        self.set_has_style(true);
+    }
+
+    self
+}
+
+
+#[inline(always)]
+pub fn style<M: ClassMarker>(self) -> Self {
+    self.class(M::NAME)
+}
+
+#[inline(always)]
+pub fn css_var(self, name: &str, value: impl std::fmt::Display) -> Self {
+    let kebab = name.replace('_', "-");
+    self.style_attr(format!("--{kebab}: {value};"))
+}
+
+pub fn css_vars(self, vars: &[(&str, &dyn std::fmt::Display)]) -> Self {
+    let style = vars.iter()
+        .map(|(n, v)| format!("--{}: {v};", n.replace('_', "-")))
+        .collect::<Vec<_>>().join(" ");
+    self.style_attr(style)
+}
             // ---------------------------------------------------------
             // Common attributes
             // ---------------------------------------------------------

@@ -86,8 +86,9 @@ pub fn expand(input: TokenStream) -> TokenStream {
         }
 
         #[inline]
-        pub fn #fn_name() -> chain_ui_core::Element {
-            chain_ui_core::tag::style().child(#css_fn_name())
-        }
+        
+pub fn #fn_name() -> chain_ui_core::Element {
+    chain_ui_core::tag::style().child(chain_ui_core::raw_html(#css_fn_name()))
+}
     }
 }

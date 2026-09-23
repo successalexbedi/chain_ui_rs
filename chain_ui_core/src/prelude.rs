@@ -11,3 +11,4 @@ pub use crate::strings::ChainStr;
 pub use crate::chain_fmt;
 pub use chain_ui_macros::context;
 pub use crate::shell::PageShell;
+pub use crate::attrs::ClassMarker;

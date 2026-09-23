@@ -97,10 +97,27 @@ name = "chain_ui_alphine"
 version = "0.1.0"
 
 [[package]]
+name = "chain_ui_alphine"
+version = "0.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "eac6f3be5d637ae288eec6a03f4c24dffa06e93300f1222d55e6f94d56bc5062"
+
+[[package]]
 name = "chain_ui_core"
 version = "0.1.0"
 dependencies = [
- "chain_ui_macros",
+ "chain_ui_macros 0.1.0",
+ "owo-colors",
+ "textwrap",
+]
+
+[[package]]
+name = "chain_ui_core"
+version = "0.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "aab6e9e15b3b829d945697f5a6f90cabe3f41728dec013baf2fc855d7b54c22f"
+dependencies = [
+ "chain_ui_macros 0.1.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "owo-colors",
  "textwrap",
 ]
@@ -110,7 +127,19 @@ name = "chain_ui_htmx"
 version = "0.1.0"
 dependencies = [
  "axum",
- "chain_ui_core",
+ "chain_ui_core 0.1.0",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
+name = "chain_ui_htmx"
+version = "0.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "c0d04933a490a9167c2c4191bd8903b07181ab1659f6f8e3213c0df79d30827b"
+dependencies = [
+ "axum",
+ "chain_ui_core 0.1.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "serde",
  "serde_json",
 ]
@@ -125,18 +154,51 @@ dependencies = [
 ]
 
 [[package]]
+name = "chain_ui_macros"
+version = "0.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b2f649086c6f54d171e69eeb3710981f15452136178e497b135d1ee0ac1f2727"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn 2.0.119",
+]
+
+[[package]]
 name = "chain_ui_style"
 version = "0.1.0"
 dependencies = [
- "chain_ui_core",
- "chain_ui_style_macros",
+ "chain_ui_core 0.1.0",
+ "chain_ui_style_macros 0.1.0",
+]
+
+[[package]]
+name = "chain_ui_style"
+version = "0.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "42f04d84bde465452b98f56453daaeac9f838147f96868ee66e96f5cd2337d34"
+dependencies = [
+ "chain_ui_core 0.1.0 (registry+https://github.com/rust-lang/crates.io-index)",
+ "chain_ui_style_macros 0.1.0 (registry+https://github.com/rust-lang/crates.io-index)",
 ]
 
 [[package]]
 name = "chain_ui_style_macros"
 version = "0.1.0"
 dependencies = [
- "chain_ui_core",
+ "chain_ui_core 0.1.0",
+ "proc-macro2",
+ "quote",
+ "syn 2.0.119",
+]
+
+[[package]]
+name = "chain_ui_style_macros"
+version = "0.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b43337a263bdf85649b8f8bfb7166ff106a067d8401491b703238d787b8b8f73"
+dependencies = [
+ "chain_ui_core 0.1.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "proc-macro2",
  "quote",
  "syn 2.0.119",
@@ -147,9 +209,9 @@ name = "chain_ui_test"
 version = "0.1.0"
 dependencies = [
  "axum",
- "chain_ui_core",
- "chain_ui_style",
- "chain_ui_unpoly",
+ "chain_ui_core 0.1.0",
+ "chain_ui_style 0.1.0",
+ "chain_ui_unpoly 0.1.0",
  "serde",
  "serde_json",
  "tokio",
@@ -160,9 +222,32 @@ name = "chain_ui_unpoly"
 version = "0.1.0"
 dependencies = [
  "axum",
- "chain_ui_core",
+ "chain_ui_core 0.1.0",
  "serde",
  "serde_json",
+]
+
+[[package]]
+name = "chain_ui_unpoly"
+version = "0.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "2b9fc5100fadb8e090091389511c46624f5bc4db20e3dffe8143fb327b0e54c2"
+dependencies = [
+ "axum",
+ "chain_ui_core 0.1.0 (registry+https://github.com/rust-lang/crates.io-index)",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
+name = "chainui_rs"
+version = "0.1.0"
+dependencies = [
+ "chain_ui_alphine 0.1.0 (registry+https://github.com/rust-lang/crates.io-index)",
+ "chain_ui_core 0.1.0 (registry+https://github.com/rust-lang/crates.io-index)",
+ "chain_ui_htmx 0.1.0 (registry+https://github.com/rust-lang/crates.io-index)",
+ "chain_ui_style 0.1.0 (registry+https://github.com/rust-lang/crates.io-index)",
+ "chain_ui_unpoly 0.1.0 (registry+https://github.com/rust-lang/crates.io-index)",
 ]
 
 [[package]]

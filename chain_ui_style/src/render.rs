@@ -182,7 +182,7 @@ pub fn render_css(styles: Vec<Style>) -> String {
 }
 
 pub fn render_theme(styles: Vec<Style>) -> Element {
-    tag::style().child(render_css(styles))
+    tag::style().child(chain_ui_core::raw_html(render_css(styles)))
 }
 
 /// Naive but safe whitespace-collapsing minifier — not a full CSS

@@ -2,6 +2,9 @@
 name = "chain_ui_core"
 version.workspace = true
 edition.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Streaming HTML engine for Rust" 
 
 [dependencies]
 owo-colors.workspace = true

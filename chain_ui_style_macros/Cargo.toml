@@ -2,6 +2,9 @@
 name = "chain_ui_style_macros"
 version.workspace = true
 edition.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "chain_ui_style macros" 
 
 [lib]
 proc-macro = true

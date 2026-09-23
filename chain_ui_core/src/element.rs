@@ -23,6 +23,7 @@ pub struct Element {
     pub tag: &'static str,
     pub head_closed: bool,
     pub has_class: bool,
+    pub has_style: bool,
     pub emitted: bool,
 }
 
@@ -62,6 +63,7 @@ impl Element {
             tag,
             head_closed: false,
             has_class: false,
+            has_style: false,
             emitted: false,
         }
     }
@@ -181,6 +183,7 @@ pub struct VoidElement {
     pub buf: StreamBuf,
     pub tag: &'static str,
     pub has_class: bool,
+    pub has_style: bool,
     pub emitted: bool,
 }
 
@@ -219,6 +222,7 @@ impl VoidElement {
             buf,
             tag,
             has_class: false,
+            has_style: false,
             emitted: false,
         }
     }
@@ -302,6 +306,10 @@ impl HtmlElement for Element {
     fn has_class(&self) -> bool { self.has_class }
     #[inline(always)]
     fn set_has_class(&mut self, val: bool) { self.has_class = val; }
+    #[inline(always)]
+    fn has_style(&self) -> bool { self.has_style }
+    #[inline(always)]
+    fn set_has_style(&mut self, val: bool) { self.has_style = val; }
 }
 
 impl HtmlElement for VoidElement {
@@ -313,4 +321,8 @@ impl HtmlElement for VoidElement {
     fn has_class(&self) -> bool { self.has_class }
     #[inline(always)]
     fn set_has_class(&mut self, val: bool) { self.has_class = val; }
+    #[inline(always)]
+    fn has_style(&self) -> bool { self.has_style }
+    #[inline(always)]
+    fn set_has_style(&mut self, val: bool) { self.has_style = val; }
 }

@@ -1,0 +1,20 @@
+[package]
+name = "chainui_rs"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+
+
+[dependencies]
+chain_ui_core = "0.1.0"
+chain_ui_style = "0.1.0"
+chain_ui_unpoly = { version = "0.1.0", optional = true }
+chain_ui_htmx = { version = "0.1.0", optional = true }
+chain_ui_alphine = { version = "0.1.0", optional = true }
+
+[features]
+default = []
+unpoly = ["dep:chain_ui_unpoly"]
+htmx = ["dep:chain_ui_htmx"]
+alphine = ["dep:chain_ui_alphine"]

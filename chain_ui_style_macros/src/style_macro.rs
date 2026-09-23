@@ -396,26 +396,29 @@ fn codegen(name: &str, uses: &[String], decls: Vec<Decl>, nested: Vec<Nested>, p
     let uses_ts = uses.iter().map(|u| quote! { #u.into() });
 
     quote! {
-        #[allow(non_camel_case_types)]
-        pub struct #marker;
+    #[allow(non_camel_case_types)]
+    pub struct #marker;
 
-        impl chain_ui_style::registry::StyleDef for #marker {
-            const NAME: &'static str = #name;
-            fn build() -> chain_ui_style::ast::Style {
-                chain_ui_style::ast::Style {
-                    name: #name.into(),
-                    uses: vec![ #(#uses_ts),* ],
-                    declarations: vec![ #(#decl_ts),* ],
-                    nested: vec![ #(#nested_ts),* ],
-                    parent: vec![ #(#parent_ts),* ],
-                    at_rules: vec![ #(#at_rules_ts),* ],
-                    raw: vec![ #(#raw_ts),* ],
-                    is_global: false,
-                    selector_override: None,
-                }
+    impl chain_ui_core::ClassMarker for #marker {
+        const NAME: &'static str = #name;
+    }
+
+    impl chain_ui_style::registry::StyleDef for #marker {
+        fn build() -> chain_ui_style::ast::Style {
+            chain_ui_style::ast::Style {
+                name: #name.into(),
+                uses: vec![ #(#uses_ts),* ],
+                declarations: vec![ #(#decl_ts),* ],
+                nested: vec![ #(#nested_ts),* ],
+                parent: vec![ #(#parent_ts),* ],
+                at_rules: vec![ #(#at_rules_ts),* ],
+                raw: vec![ #(#raw_ts),* ],
+                is_global: false,
+                selector_override: None,
             }
         }
     }
+}
 }
 
 

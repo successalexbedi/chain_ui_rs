@@ -139,9 +139,13 @@ impl_tuple_stream!(A B C D E F);
     label = "doesn't implement `HtmlElement`",
     note = "Only `Element` and `VoidElement` implement this — it's internal plumbing, not something you implement yourself."
 )]
+
 pub trait HtmlElement {
     fn stream(&mut self) -> &mut StreamBuf;
     fn is_head_closed(&self) -> bool;
     fn has_class(&self) -> bool;
     fn set_has_class(&mut self, val: bool);
+    fn has_style(&self) -> bool;
+    fn set_has_style(&mut self, val: bool);
 }
+

@@ -17,10 +17,11 @@ pub fn parse_value(cur: &mut Cursor, property: &str) -> ParsedValue {
     }
 
     if let [ValueSegment::Literal(only)] = segments.as_slice() {
-        if let Err(msg) = crate::known_values::validate(property, only) {
-            panic!("{msg}");
-        }
+    let kebab_property = property.replace('_', "-");
+    if let Err(msg) = crate::known_values::validate(&kebab_property, only) {
+        panic!("{msg}");
     }
+}
 
     cur.expect_punct(';');
     ParsedValue { segments }

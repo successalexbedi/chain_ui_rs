@@ -7,13 +7,21 @@ members=[
     "chain_ui_macros", 
     "chain_ui_test",
     "chain_ui_style", 
-    "chain_ui_style_macros",
+    "chain_ui_style_macros", "chainui_rs",
 ]
 resolver="3"
+
+
 
 [workspace.package]
 version = "0.1.0"
 edition = "2024"
+license = "MIT"
+repository = "https://github.com/successalexbedi/chain_ui_rs"
+
+
+
+
 
 [workspace.dependencies]
 owo-colors = "4"
@@ -25,11 +33,11 @@ proc-macro2 = "1"
 axum = "0.7"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
-chain_ui_core = { path = "chain_ui_core" }
-chain_ui_unpoly = { path = "chain_ui_unpoly" }
-chain_ui_macros = { path = "chain_ui_macros" }
-chain_ui_style = { path = "chain_ui_style" }
-chain_ui_style_macros = { path = "chain_ui_style_macros" }
+chain_ui_core = { path = "chain_ui_core", version = "0.1.0" }
+chain_ui_unpoly = { path = "chain_ui_unpoly", version = "0.1.0" }
+chain_ui_macros = { path = "chain_ui_macros", version = "0.1.0" }
+chain_ui_style = { path = "chain_ui_style", version = "0.1.0" }
+chain_ui_style_macros = { path = "chain_ui_style_macros", version = "0.1.0" }
 
 
 
