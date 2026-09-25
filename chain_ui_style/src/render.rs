@@ -117,6 +117,30 @@ fn render_at_rule(a: &AtRule, selector: &str) -> String {
     format!("@{} {} {{\n{} {{\n{}\n}}\n}}\n", a.kind, a.query, selector, render_declarations(&a.declarations))
 }
 
+/// Renders one NestedRule under `base_selector`, then recurses into
+/// its own `children` using the compound selector as the new base —
+/// this is the fix that makes `.a { .b { .c { } } }` actually emit
+/// nested CSS instead of stopping after one level.
+fn render_nested(base_selector: &str, nested: &NestedRule, out: &mut String) {
+    let full_selector = format!("{base_selector} {}", nested.selector);
+
+    if !nested.declarations.is_empty() {
+        out.push_str(&format!("{full_selector} {{\n{}\n}}\n", render_declarations(&nested.declarations)));
+    }
+
+    for p in &nested.parent {
+        out.push_str(&format!("{full_selector}{} {{\n{}\n}}\n", p.suffix, render_declarations(&p.declarations)));
+    }
+
+    for a in merge_at_rules(nested.at_rules.clone()) {
+        out.push_str(&render_at_rule(&a, &full_selector));
+    }
+
+    for child in &nested.children {
+        render_nested(&full_selector, child, out); // recurse — arbitrary depth
+    }
+}
+
 fn render_style(resolved: &Style) -> String {
     let mut out = String::new();
     let selector = selector_for(resolved);
@@ -126,16 +150,7 @@ fn render_style(resolved: &Style) -> String {
     }
 
     for nested in &resolved.nested {
-        if !nested.declarations.is_empty() {
-            out.push_str(&format!("{} {} {{\n{}\n}}\n", selector, nested.selector, render_declarations(&nested.declarations)));
-        }
-        for p in &nested.parent {
-            out.push_str(&format!("{} {}{} {{\n{}\n}}\n", selector, nested.selector, p.suffix, render_declarations(&p.declarations)));
-        }
-        let nested_selector = format!("{} {}", selector, nested.selector);
-        for a in merge_at_rules(nested.at_rules.clone()) {
-            out.push_str(&render_at_rule(&a, &nested_selector));
-        }
+        render_nested(&selector, nested, &mut out);
     }
 
     for parent in &resolved.parent {

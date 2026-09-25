@@ -23,6 +23,7 @@ pub struct NestedRule {
     pub declarations: Vec<Declaration>,
     pub parent: Vec<ParentRule>,
     pub at_rules: Vec<AtRule>,
+    pub children: Vec<NestedRule>, // NEW — nested .class{}/>.class{} blocks inside this one
 }
 
 #[derive(Debug, Clone)]

@@ -4,14 +4,14 @@ version.workspace = true
 edition.workspace = true
 license.workspace = true
 repository.workspace = true
-
+description = "Facade crate re-exporting chain_ui_core and chain_ui_style as a single dependency"
 
 [dependencies]
-chain_ui_core = "0.1.0"
-chain_ui_style = "0.1.0"
-chain_ui_unpoly = { version = "0.1.0", optional = true }
-chain_ui_htmx = { version = "0.1.0", optional = true }
-chain_ui_alphine = { version = "0.1.0", optional = true }
+chain_ui_core = { workspace = true }
+chain_ui_style = { workspace = true }
+chain_ui_unpoly = { workspace = true, optional = true }
+chain_ui_htmx = { workspace = true, optional = true }
+chain_ui_alphine = { workspace = true, optional = true }
 
 [features]
 default = []

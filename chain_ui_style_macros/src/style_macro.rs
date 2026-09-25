@@ -1,4 +1,4 @@
-use crate::cursor::Cursor;
+use crate::cursor::{Cursor, describe_token};
 use crate::value::ParsedValue;
 use crate::value_parser;
 use proc_macro2::{Delimiter, Span, TokenStream, TokenTree};
@@ -9,7 +9,13 @@ pub(crate) struct Decl {
     pub value: ParsedValue,
 }
 
-struct Nested { selector: String, decls: Vec<Decl>, parent: Vec<Parent>, at_rules: Vec<AtRuleSrc> }
+struct Nested {
+    selector: String,
+    decls: Vec<Decl>,
+    parent: Vec<Parent>,
+    at_rules: Vec<AtRuleSrc>,
+    children: Vec<Nested>,
+}
 struct Parent { suffix: String, decls: Vec<Decl> }
 struct AtRuleSrc { kind: String, query: String, decls: Vec<Decl> }
 struct Raw { selector: String, decls: Vec<Decl>, at_rules: Vec<AtRuleSrc> }
@@ -144,9 +150,15 @@ pub fn expand(input: TokenStream) -> TokenStream {
             let group = body.expect_group(Delimiter::Brace);
             let mut inner = Cursor::new(group.stream());
             let ctx = format!("> .{sel_ident} inside `{name}`");
-            let (inner_decls, inner_parent, inner_at) = parse_nested_body(&mut inner, &ctx);
+            let (inner_decls, inner_parent, inner_at, inner_children) = parse_nested_body(&mut inner, &ctx);
             check_duplicates(&inner_decls, &ctx);
-            nested.push(Nested { selector: format!("> .{sel_ident}"), decls: inner_decls, parent: inner_parent, at_rules: inner_at });
+            nested.push(Nested {
+                selector: format!("> .{sel_ident}"),
+                decls: inner_decls,
+                parent: inner_parent,
+                at_rules: inner_at,
+                children: inner_children,
+            });
             continue;
         }
 
@@ -156,9 +168,15 @@ pub fn expand(input: TokenStream) -> TokenStream {
             let group = body.expect_group(Delimiter::Brace);
             let mut inner = Cursor::new(group.stream());
             let ctx = format!(".{sel_ident} inside `{name}`");
-            let (inner_decls, inner_parent, inner_at) = parse_nested_body(&mut inner, &ctx);
+            let (inner_decls, inner_parent, inner_at, inner_children) = parse_nested_body(&mut inner, &ctx);
             check_duplicates(&inner_decls, &ctx);
-            nested.push(Nested { selector: format!(".{sel_ident}"), decls: inner_decls, parent: inner_parent, at_rules: inner_at });
+            nested.push(Nested {
+                selector: format!(".{sel_ident}"),
+                decls: inner_decls,
+                parent: inner_parent,
+                at_rules: inner_at,
+                children: inner_children,
+            });
             continue;
         }
 
@@ -181,9 +199,6 @@ pub fn expand(input: TokenStream) -> TokenStream {
     codegen(&name, &uses, decls, nested, parent, at_rules, raw)
 }
 
-/// Shared at-rule parser: `@media "query" { decls }`, and same
-/// shape for `@supports`/`@container`. Assumes cursor is sitting
-/// on the `@`.
 fn parse_at_rule(cur: &mut Cursor) -> (String, String, Vec<Decl>) {
     cur.expect_punct('@');
     let kw = cur.expect_ident();
@@ -202,10 +217,14 @@ fn parse_at_rule(cur: &mut Cursor) -> (String, String, Vec<Decl>) {
     (kind, query, decls)
 }
 
-fn parse_nested_body(cur: &mut Cursor, context: &str) -> (Vec<Decl>, Vec<Parent>, Vec<AtRuleSrc>) {
+/// Parses the body of a `.class{}`/`>.class{}` block. Recognizes
+/// `&...{}`, `@media/...{}`, and `.class{}`/`>.class{}` recursively —
+/// so nesting can go arbitrarily deep.
+fn parse_nested_body(cur: &mut Cursor, context: &str) -> (Vec<Decl>, Vec<Parent>, Vec<AtRuleSrc>, Vec<Nested>) {
     let mut decls = Vec::new();
     let mut parent = Vec::new();
     let mut at_rules = Vec::new();
+    let mut children = Vec::new();
 
     while !cur.eof() {
         if cur.peek_is_punct('&') {
@@ -225,10 +244,45 @@ fn parse_nested_body(cur: &mut Cursor, context: &str) -> (Vec<Decl>, Vec<Parent>
             at_rules.push(AtRuleSrc { kind, query, decls: adecls });
             continue;
         }
+        if cur.peek_is_punct('>') {
+            cur.bump();
+            cur.expect_punct('.');
+            let sel_ident = cur.expect_ident();
+            let group = cur.expect_group(Delimiter::Brace);
+            let mut inner = Cursor::new(group.stream());
+            let sub_ctx = format!("> .{sel_ident} inside {context}");
+            let (inner_decls, inner_parent, inner_at, inner_children) = parse_nested_body(&mut inner, &sub_ctx);
+            check_duplicates(&inner_decls, &sub_ctx);
+            children.push(Nested {
+                selector: format!("> .{sel_ident}"),
+                decls: inner_decls,
+                parent: inner_parent,
+                at_rules: inner_at,
+                children: inner_children,
+            });
+            continue;
+        }
+        if cur.peek_is_punct('.') {
+            cur.bump();
+            let sel_ident = cur.expect_ident();
+            let group = cur.expect_group(Delimiter::Brace);
+            let mut inner = Cursor::new(group.stream());
+            let sub_ctx = format!(".{sel_ident} inside {context}");
+            let (inner_decls, inner_parent, inner_at, inner_children) = parse_nested_body(&mut inner, &sub_ctx);
+            check_duplicates(&inner_decls, &sub_ctx);
+            children.push(Nested {
+                selector: format!(".{sel_ident}"),
+                decls: inner_decls,
+                parent: inner_parent,
+                at_rules: inner_at,
+                children: inner_children,
+            });
+            continue;
+        }
         decls.push(parse_declaration(cur));
     }
 
-    (decls, parent, at_rules)
+    (decls, parent, at_rules, children)
 }
 
 fn parse_amp_suffix(cur: &mut Cursor) -> String {
@@ -242,7 +296,6 @@ fn parse_amp_suffix(cur: &mut Cursor) -> String {
                 suffix.push_str(&render_raw_tokens(group.stream()));
                 suffix.push(')');
             }
-            // NEW — &[disabled], &[data-state="open"]
             Some(TokenTree::Group(g)) if g.delimiter() == Delimiter::Bracket => {
                 let group = cur.expect_group(Delimiter::Bracket);
                 suffix.push('[');
@@ -251,7 +304,10 @@ fn parse_amp_suffix(cur: &mut Cursor) -> String {
             }
             Some(TokenTree::Punct(p)) => { suffix.push(p.as_char()); cur.bump(); }
             Some(TokenTree::Ident(_)) => { let i = cur.expect_ident(); suffix.push_str(&i.to_string()); }
-            other => panic!("chain_ui_style: unexpected token in `&` selector: {other:?}"),
+            other => panic!(
+                "chain_ui_style: unexpected token in `&` selector — expected an identifier, `(...)`, or `[...]`, found {}",
+                describe_token(other)
+            ),
         }
     }
     suffix
@@ -314,7 +370,10 @@ fn parse_raw_css_value(cur: &mut Cursor) -> String {
             Some(TokenTree::Ident(i)) => { out.push_str(&i.to_string()); out.push(' '); }
             Some(TokenTree::Literal(l)) => out.push_str(l.to_string().trim_matches('"')),
             Some(TokenTree::Punct(p)) => out.push(p.as_char()),
-            other => panic!("chain_ui_style: unexpected token in `css {{}}` block: {other:?}"),
+            other => panic!(
+                "chain_ui_style: unexpected token in `css {{}}` block — expected a property value, found {}",
+                describe_token(other.as_ref())
+            ),
         }
     }
     out.trim().to_string()
@@ -361,24 +420,29 @@ fn at_rule_tokens(at_rules: &[AtRuleSrc]) -> Vec<TokenStream> {
     }).collect()
 }
 
-fn codegen(name: &str, uses: &[String], decls: Vec<Decl>, nested: Vec<Nested>, parent: Vec<Parent>, at_rules: Vec<AtRuleSrc>, raw: Vec<Raw>) -> TokenStream {
-    let marker = format_ident!("{}", snake_to_pascal(name), span = Span::call_site());
-    let decl_ts = decl_tokens(&decls);
-
-    let nested_ts = nested.iter().map(|n| {
+fn nested_tokens(nested: &[Nested]) -> Vec<TokenStream> {
+    nested.iter().map(|n| {
         let selector = &n.selector;
         let inner = decl_tokens(&n.decls);
         let inner_parent = parent_tokens(&n.parent);
         let inner_at = at_rule_tokens(&n.at_rules);
+        let inner_children = nested_tokens(&n.children);
         quote! {
             chain_ui_style::ast::NestedRule {
                 selector: #selector.into(),
                 declarations: vec![ #(#inner),* ],
                 parent: vec![ #(#inner_parent),* ],
                 at_rules: vec![ #(#inner_at),* ],
+                children: vec![ #(#inner_children),* ],
             }
         }
-    });
+    }).collect()
+}
+
+fn codegen(name: &str, uses: &[String], decls: Vec<Decl>, nested: Vec<Nested>, parent: Vec<Parent>, at_rules: Vec<AtRuleSrc>, raw: Vec<Raw>) -> TokenStream {
+    let marker = format_ident!("{}", snake_to_pascal(name), span = Span::call_site());
+    let decl_ts = decl_tokens(&decls);
+    let nested_ts = nested_tokens(&nested);
     let parent_ts = parent_tokens(&parent);
     let at_rules_ts = at_rule_tokens(&at_rules);
     let raw_ts = raw.iter().map(|r| {
@@ -396,29 +460,27 @@ fn codegen(name: &str, uses: &[String], decls: Vec<Decl>, nested: Vec<Nested>, p
     let uses_ts = uses.iter().map(|u| quote! { #u.into() });
 
     quote! {
-    #[allow(non_camel_case_types)]
-    pub struct #marker;
+        #[allow(non_camel_case_types)]
+        pub struct #marker;
 
-    impl chain_ui_core::ClassMarker for #marker {
-        const NAME: &'static str = #name;
-    }
+        impl chain_ui_core::ClassMarker for #marker {
+            const NAME: &'static str = #name;
+        }
 
-    impl chain_ui_style::registry::StyleDef for #marker {
-        fn build() -> chain_ui_style::ast::Style {
-            chain_ui_style::ast::Style {
-                name: #name.into(),
-                uses: vec![ #(#uses_ts),* ],
-                declarations: vec![ #(#decl_ts),* ],
-                nested: vec![ #(#nested_ts),* ],
-                parent: vec![ #(#parent_ts),* ],
-                at_rules: vec![ #(#at_rules_ts),* ],
-                raw: vec![ #(#raw_ts),* ],
-                is_global: false,
-                selector_override: None,
+        impl chain_ui_style::registry::StyleDef for #marker {
+            fn build() -> chain_ui_style::ast::Style {
+                chain_ui_style::ast::Style {
+                    name: #name.into(),
+                    uses: vec![ #(#uses_ts),* ],
+                    declarations: vec![ #(#decl_ts),* ],
+                    nested: vec![ #(#nested_ts),* ],
+                    parent: vec![ #(#parent_ts),* ],
+                    at_rules: vec![ #(#at_rules_ts),* ],
+                    raw: vec![ #(#raw_ts),* ],
+                    is_global: false,
+                    selector_override: None,
+                }
             }
         }
     }
 }
-}
-
-

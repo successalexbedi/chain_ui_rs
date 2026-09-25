@@ -1,11 +1,10 @@
 use axum::{http::header, response::IntoResponse, routing::get, Router};
-use chain_ui_core::prelude::*;
-use chain_ui_style::prelude::*;
+use chainui_rs::prelude::*;
 
 mod styles {
     pub mod tokens {
-        chain_ui_style::contract!(ThemeTokens { colors { surface text gold muted } spacing { sm md } radius { sm } });
-        chain_ui_style::tokens! {
+        chainui_rs::style::contract!(ThemeTokens { colors { surface text gold muted } spacing { sm md } radius { sm } });
+        chainui_rs::style::tokens! {
             fictreon_dark: ThemeTokens {
                 colors { surface: "#1E1E1E", text: "#F5F3ED", gold: "#C8A45A", muted: "#A8A8A8" }
                 spacing { sm: "8px", md: "16px" }
@@ -16,7 +15,7 @@ mod styles {
 
     pub mod card_base {
         use crate::styles::tokens::fictreon_dark;
-        chain_ui_style::style!(card_base {
+        chainui_rs::style::style!(card_base {
             padding: fictreon_dark.spacing.sm;
             background: fictreon_dark.colors.surface;
 
@@ -31,7 +30,7 @@ mod styles {
     pub mod button {
         use crate::styles::tokens::fictreon_dark;
 
-        chain_ui_style::style!(button {
+        chainui_rs::style::style!(button {
             compose: card_base;
 
             padding: fictreon_dark.spacing.md;
@@ -56,7 +55,7 @@ mod styles {
         use super::button::Button;
         use super::card_base::CardBase;
 
-        chain_ui_style::theme!("fictreon" {
+        chainui_rs::style::theme!("fictreon" {
             card_base;
             button;
         });
@@ -70,20 +69,20 @@ fn test_page() -> Element {
     tag::html()
         .child(
             tag::head()
-                .child(tag::title().child("chain_ui_style test"))
+                .child(tag::title().child("chainui_rs test"))
                 .child(styles::theme::fictreon_theme()),
         )
         .child(
             tag::body()
-                // .style::<Marker>() via ClassMarker — no StyleExt import needed
+                // .style::<Marker>() — plain Element method, no separate import
                 .child(
                     tag::div()
                         .style::<CardBase>()
                         .child(tag::span().class("icon").child("★"))
                         .child("a card"),
                 )
-                // two .css_var() calls, one tag — proves style_attr() merge:
-                // view-source should show ONE style="--a:..;--b:..;" attribute
+                // two .css_var() calls, one tag — view-source should show
+                // ONE style="--a:..;--b:..;" attribute
                 .child(
                     tag::button()
                         .style::<Button>()
@@ -112,7 +111,7 @@ fn test_page() -> Element {
 
 async fn debug_css() -> impl IntoResponse {
     let pretty = styles::theme::fictreon_css();
-    let minified = chain_ui_style::render::minify(pretty);
+    let minified = chainui_rs::style::render::minify(pretty);
     (
         [(header::CONTENT_TYPE, "text/plain; charset=utf-8")],
         format!(
@@ -134,7 +133,7 @@ async fn main() {
         .route("/__css", get(debug_css))
         .route("/", get(debug_page));
     let listener = tokio::net::TcpListener::bind("127.0.0.1:3000").await.unwrap();
-    println!("running on http://127.0.0.1:3000");
+    println!("running on http://127.0.0.1:3000 via chainui_rs facade");
     println!("  GET /       — view-source, check for stray &gt; or duplicate style= attrs");
     println!("  GET /__css  — raw + minified CSS");
     axum::serve(listener, app).await.unwrap();

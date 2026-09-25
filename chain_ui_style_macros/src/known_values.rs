@@ -24,7 +24,7 @@ pub const KNOWN_VALUES: &[(&str, &[&str])] = &[
     ("white-space", &["normal", "nowrap", "pre", "pre-wrap", "pre-line", "break-spaces"]),
     ("word-break", &["normal", "break-all", "keep-all", "break-word"]),
     ("overflow-wrap", &["normal", "break-word", "anywhere"]),
-    ("font-weight", &["normal", "bold", "bolder", "lighter"]),
+    ("font-weight", &["normal", "bold", "bolder", "lighter", "100", "200", "300", "400", "500", "600", "700", "800", "900"]),
     ("font-style", &["normal", "italic", "oblique"]),
     ("font-variant", &["normal", "small-caps"]),
     ("vertical-align", &["baseline", "top", "middle", "bottom", "text-top", "text-bottom", "sub", "super"]),

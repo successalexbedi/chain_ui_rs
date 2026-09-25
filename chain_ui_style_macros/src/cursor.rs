@@ -1,5 +1,17 @@
 use proc_macro2::{Delimiter, Group, Ident, Literal, Punct, TokenStream, TokenTree};
 
+/// Renders a token in plain English instead of Rust's Debug format —
+/// "the character '@'" instead of "Punct { char: '@', spacing: Alone, ... }".
+pub fn describe_token(t: Option<&TokenTree>) -> String {
+    match t {
+        None => "end of input".to_string(),
+        Some(TokenTree::Ident(i)) => format!("identifier `{i}`"),
+        Some(TokenTree::Literal(l)) => format!("literal `{l}`"),
+        Some(TokenTree::Punct(p)) => format!("the character `{}`", p.as_char()),
+        Some(TokenTree::Group(g)) => format!("a `{:?}`-delimited group", g.delimiter()),
+    }
+}
+
 pub struct Cursor {
     tokens: Vec<TokenTree>,
     pos: usize,
@@ -21,25 +33,25 @@ impl Cursor {
     pub fn expect_ident(&mut self) -> Ident {
         match self.bump() {
             Some(TokenTree::Ident(i)) => i,
-            other => panic!("chain_ui_style: expected identifier, got {other:?}"),
+            other => panic!("chain_ui_style: expected an identifier, found {}", describe_token(other.as_ref())),
         }
     }
     pub fn expect_literal(&mut self) -> Literal {
         match self.bump() {
             Some(TokenTree::Literal(l)) => l,
-            other => panic!("chain_ui_style: expected literal, got {other:?}"),
+            other => panic!("chain_ui_style: expected a literal value (e.g. \"...\" or 16px), found {}", describe_token(other.as_ref())),
         }
     }
     pub fn expect_group(&mut self, delim: Delimiter) -> Group {
         match self.bump() {
             Some(TokenTree::Group(g)) if g.delimiter() == delim => g,
-            other => panic!("chain_ui_style: expected group, got {other:?}"),
+            other => panic!("chain_ui_style: expected a `{{...}}` block, found {}", describe_token(other.as_ref())),
         }
     }
     pub fn expect_punct(&mut self, ch: char) -> Punct {
         match self.bump() {
             Some(TokenTree::Punct(p)) if p.as_char() == ch => p,
-            other => panic!("chain_ui_style: expected `{ch}`, got {other:?}"),
+            other => panic!("chain_ui_style: expected `{ch}`, found {}", describe_token(other.as_ref())),
         }
     }
     pub fn peek_is_punct(&self, ch: char) -> bool {

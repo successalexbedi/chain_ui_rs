@@ -17,11 +17,11 @@ pub fn parse_value(cur: &mut Cursor, property: &str) -> ParsedValue {
     }
 
     if let [ValueSegment::Literal(only)] = segments.as_slice() {
-    let kebab_property = property.replace('_', "-");
-    if let Err(msg) = crate::known_values::validate(&kebab_property, only) {
-        panic!("{msg}");
+        let kebab_property = property.replace('_', "-");
+        if let Err(msg) = crate::known_values::validate(&kebab_property, only) {
+            panic!("{msg}");
+        }
     }
-}
 
     cur.expect_punct(';');
     ParsedValue { segments }
@@ -78,13 +78,12 @@ fn parse_segments(cur: &mut Cursor, top_level: bool) -> Vec<ValueSegment> {
                         flush(&mut buf, &mut segments);
                         segments.extend(parse_var(group.stream()));
                     } else {
-                        // FIX: no space between function name and "("
                         buf.push_str(&name.replace('_', "-"));
                         buf.push('(');
                         flush(&mut buf, &mut segments);
                         let mut inner = Cursor::new(group.stream());
                         let mut inner_segments = parse_segments(&mut inner, false);
-                        trim_edges(&mut inner_segments); // FIX: strip trailing space before ")"
+                        trim_edges(&mut inner_segments);
                         segments.extend(inner_segments);
                         segments.push(ValueSegment::Literal(")".into()));
                     }
@@ -100,11 +99,6 @@ fn parse_segments(cur: &mut Cursor, top_level: bool) -> Vec<ValueSegment> {
                     kw.push_str(&cur.expect_ident().to_string());
                 }
                 buf.push_str(&kw);
-                // FIX: don't add the separating space yet if a
-                // Parenthesis group (function call) follows right
-                // after a hyphenated name like `linear-gradient` —
-                // otherwise it leaks into the generic Group branch
-                // below as "linear-gradient ("
                 if !matches!(cur.peek(), Some(TokenTree::Group(g)) if g.delimiter() == Delimiter::Parenthesis) {
                     buf.push(' ');
                 }
@@ -161,12 +155,12 @@ fn parse_segments(cur: &mut Cursor, top_level: bool) -> Vec<ValueSegment> {
                     Delimiter::Brace => ("{", "}"),
                     Delimiter::None => ("", ""),
                 };
-                while buf.ends_with(' ') { buf.pop(); } // FIX: no space before "("
+                while buf.ends_with(' ') { buf.pop(); }
                 buf.push_str(open);
                 flush(&mut buf, &mut segments);
                 let mut inner = Cursor::new(g.stream());
                 let mut inner_segments = parse_segments(&mut inner, false);
-                trim_edges(&mut inner_segments); // FIX: no space before ")"
+                trim_edges(&mut inner_segments);
                 segments.extend(inner_segments);
                 segments.push(ValueSegment::Literal(close.into()));
                 last_was_value = true;

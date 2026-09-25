@@ -55,6 +55,33 @@ pub mod svg {
             path, circle, rect, line, ellipse, polygon, polyline, stop, image,
         }
     }
+    
+    
+    use crate::element::Element;
+
+/// A plain circle icon — radius as a fraction of a 24x24 viewBox center.
+pub fn circle_icon(r: u32) -> Element {
+    Element::new("circle")
+        .attr("cx", "12").attr("cy", "12")
+        .attr("r", crate::chain_fmt!("{r}"))
+}
+
+/// A checkmark path — the one shape reused constantly across UI
+/// (selected states, confirmation badges) with no meaningful variation.
+pub fn check_path() -> Element {
+    Element::new("path").attr("d", "M5 12l5 5L19 7")
+}
+
+/// A plain rounded square — avatars/icon backgrounds that don't need
+/// custom geometry, just a consistent rect.
+pub fn rounded_square(radius: u32) -> Element {
+    Element::new("rect")
+        .attr("x", "2").attr("y", "2")
+        .attr("width", "20").attr("height", "20")
+        .attr("rx", crate::chain_fmt!("{radius}"))
+}
+    
+    
 
     /// `use` is a Rust keyword — can't go through declare_tags! like the
     /// others, needs a raw identifier and an explicit tag-name string.
