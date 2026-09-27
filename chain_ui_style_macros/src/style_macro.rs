@@ -16,7 +16,19 @@ struct Nested {
     at_rules: Vec<AtRuleSrc>,
     children: Vec<Nested>,
 }
-struct Parent { suffix: String, decls: Vec<Decl> }
+
+/// A `&suffix{}` block's parsed contents. `nested`/`at_rules` are what
+/// let `&.selected { .img_box { ... } }` and `&.slot_1 { @media "..." {} }`
+/// work — a `&` block is parsed with the exact same grammar as a
+/// `.class{}` block, just attached to the parent selector directly
+/// instead of with a descendant space.
+struct Parent {
+    suffix: String,
+    decls: Vec<Decl>,
+    nested: Vec<Nested>,
+    at_rules: Vec<AtRuleSrc>,
+}
+
 struct AtRuleSrc { kind: String, query: String, decls: Vec<Decl> }
 struct Raw { selector: String, decls: Vec<Decl>, at_rules: Vec<AtRuleSrc> }
 
@@ -113,7 +125,7 @@ pub fn expand(input: TokenStream) -> TokenStream {
                 let mut vdecls = Vec::new();
                 while !vinner.eof() { vdecls.push(parse_declaration(&mut vinner)); }
                 check_duplicates(&vdecls, &format!("variant `{value_name}` inside `{name}`"));
-                parent.push(Parent { suffix: format!(".{value_name}"), decls: vdecls });
+                parent.push(Parent { suffix: format!(".{value_name}"), decls: vdecls, nested: Vec::new(), at_rules: Vec::new() });
             }
             continue;
         }
@@ -139,21 +151,22 @@ pub fn expand(input: TokenStream) -> TokenStream {
             let mut cdecls = Vec::new();
             while !inner.eof() { cdecls.push(parse_declaration(&mut inner)); }
             check_duplicates(&cdecls, &format!("compound{suffix} inside `{name}`"));
-            parent.push(Parent { suffix, decls: cdecls });
+            parent.push(Parent { suffix, decls: cdecls, nested: Vec::new(), at_rules: Vec::new() });
             continue;
         }
 
         if body.peek_is_punct('>') {
             body.bump();
             body.expect_punct('.');
-            let sel_ident = body.expect_ident();
+            let sel_name = parse_class_selector_name(&mut body);
+            // ...rest unchanged, using sel_name instead of sel_ident
             let group = body.expect_group(Delimiter::Brace);
             let mut inner = Cursor::new(group.stream());
-            let ctx = format!("> .{sel_ident} inside `{name}`");
+            let ctx = format!("> .{sel_name} inside `{name}`");
             let (inner_decls, inner_parent, inner_at, inner_children) = parse_nested_body(&mut inner, &ctx);
             check_duplicates(&inner_decls, &ctx);
             nested.push(Nested {
-                selector: format!("> .{sel_ident}"),
+                selector: format!("> .{sel_name}"),
                 decls: inner_decls,
                 parent: inner_parent,
                 at_rules: inner_at,
@@ -163,32 +176,28 @@ pub fn expand(input: TokenStream) -> TokenStream {
         }
 
         if body.peek_is_punct('.') {
-            body.bump();
-            let sel_ident = body.expect_ident();
-            let group = body.expect_group(Delimiter::Brace);
-            let mut inner = Cursor::new(group.stream());
-            let ctx = format!(".{sel_ident} inside `{name}`");
-            let (inner_decls, inner_parent, inner_at, inner_children) = parse_nested_body(&mut inner, &ctx);
-            check_duplicates(&inner_decls, &ctx);
-            nested.push(Nested {
-                selector: format!(".{sel_ident}"),
-                decls: inner_decls,
-                parent: inner_parent,
-                at_rules: inner_at,
-                children: inner_children,
-            });
-            continue;
-        }
+         body.bump();
+        let sel_name = parse_class_selector_name(&mut body);
+        let group = body.expect_group(Delimiter::Brace);
+        let mut inner = Cursor::new(group.stream());
+        let ctx = format!(".{sel_name} inside `{name}`");
+        let (inner_decls, inner_parent, inner_at, inner_children) = parse_nested_body(&mut inner, &ctx);
+        check_duplicates(&inner_decls, &ctx);
+        nested.push(Nested {
+        selector: format!(".{sel_name}"),
+        decls: inner_decls,
+        parent: inner_parent,
+        at_rules: inner_at,
+        children: inner_children,
+    });
+    continue;
+}
 
         if body.peek_is_punct('&') {
             body.bump();
             let suffix = parse_amp_suffix(&mut body);
-            let group = body.expect_group(Delimiter::Brace);
-            let mut inner = Cursor::new(group.stream());
-            let mut inner_decls = Vec::new();
-            while !inner.eof() { inner_decls.push(parse_declaration(&mut inner)); }
-            check_duplicates(&inner_decls, &format!("&{suffix} inside `{name}`"));
-            parent.push(Parent { suffix, decls: inner_decls });
+            let p = parse_parent_block(&mut body, suffix, &format!("style `{name}`"));
+            parent.push(p);
             continue;
         }
 
@@ -198,6 +207,24 @@ pub fn expand(input: TokenStream) -> TokenStream {
     check_duplicates(&decls, &format!("style `{name}`"));
     codegen(&name, &uses, decls, nested, parent, at_rules, raw)
 }
+
+/// Parses the name after a `.` in a class selector. Two forms:
+///   .classname          — a plain Rust identifier (existing, unchanged)
+///   .$"my-class"         — a raw string literal, for names that aren't
+///                          legal Rust identifiers (hyphens, leading
+///                          digits, etc.) — `$` here means "raw string
+///                          follows", distinct from `${expr}` which is
+///                          `$` followed by a brace group.
+fn parse_class_selector_name(cur: &mut Cursor) -> String {
+    if cur.peek_is_punct('$') {
+        cur.bump();
+        let lit = cur.expect_literal();
+        lit.to_string().trim_matches('"').to_string()
+    } else {
+        cur.expect_ident().to_string()
+    }
+}
+
 
 fn parse_at_rule(cur: &mut Cursor) -> (String, String, Vec<Decl>) {
     cur.expect_punct('@');
@@ -217,9 +244,31 @@ fn parse_at_rule(cur: &mut Cursor) -> (String, String, Vec<Decl>) {
     (kind, query, decls)
 }
 
-/// Parses the body of a `.class{}`/`>.class{}` block. Recognizes
-/// `&...{}`, `@media/...{}`, and `.class{}`/`>.class{}` recursively —
-/// so nesting can go arbitrarily deep.
+/// Parses a `&suffix { ... }` block's body using the exact same
+/// grammar as a `.class{}` block — so `&.selected { .img_box { ... } }`
+/// and `&.slot_1 { @media "..." { ... } }` both work. Nested `&{}`
+/// inside this block (i.e. `&` inside `&`) is deliberately rejected
+/// with a clear message rather than silently dropped, since chaining
+/// two `&` suffixes has no unambiguous CSS meaning here.
+fn parse_parent_block(cur: &mut Cursor, suffix: String, context: &str) -> Parent {
+    let group = cur.expect_group(Delimiter::Brace);
+    let mut inner = Cursor::new(group.stream());
+    let sub_ctx = format!("&{suffix} inside {context}");
+    let (decls, inner_parent, at_rules, nested) = parse_nested_body(&mut inner, &sub_ctx);
+    if !inner_parent.is_empty() {
+        panic!(
+            "chain_ui_style: nested `&` selectors inside `&{suffix}` are not supported — \
+             flatten into a single `&` suffix instead (e.g. `&.a.b {{ }}` not `&.a {{ &.b {{ }} }}`), \
+             inside {context}"
+        );
+    }
+    check_duplicates(&decls, &sub_ctx);
+    Parent { suffix, decls, nested, at_rules }
+}
+
+/// Parses the body of a `.class{}`/`>.class{}`/`&suffix{}` block.
+/// Recognizes `&...{}`, `@media/...{}`, and `.class{}`/`>.class{}`
+/// recursively — so nesting goes arbitrarily deep in every direction.
 fn parse_nested_body(cur: &mut Cursor, context: &str) -> (Vec<Decl>, Vec<Parent>, Vec<AtRuleSrc>, Vec<Nested>) {
     let mut decls = Vec::new();
     let mut parent = Vec::new();
@@ -230,12 +279,8 @@ fn parse_nested_body(cur: &mut Cursor, context: &str) -> (Vec<Decl>, Vec<Parent>
         if cur.peek_is_punct('&') {
             cur.bump();
             let suffix = parse_amp_suffix(cur);
-            let group = cur.expect_group(Delimiter::Brace);
-            let mut inner = Cursor::new(group.stream());
-            let mut pdecls = Vec::new();
-            while !inner.eof() { pdecls.push(parse_declaration(&mut inner)); }
-            check_duplicates(&pdecls, &format!("&{suffix} inside {context}"));
-            parent.push(Parent { suffix, decls: pdecls });
+            let p = parse_parent_block(cur, suffix, context);
+            parent.push(p);
             continue;
         }
         if cur.peek_is_punct('@') {
@@ -407,7 +452,16 @@ fn parent_tokens(parent: &[Parent]) -> Vec<TokenStream> {
     parent.iter().map(|p| {
         let suffix = &p.suffix;
         let inner = decl_tokens(&p.decls);
-        quote! { chain_ui_style::ast::ParentRule { suffix: #suffix.into(), declarations: vec![ #(#inner),* ] } }
+        let inner_nested = nested_tokens(&p.nested);
+        let inner_at = at_rule_tokens(&p.at_rules);
+        quote! {
+            chain_ui_style::ast::ParentRule {
+                suffix: #suffix.into(),
+                declarations: vec![ #(#inner),* ],
+                nested: vec![ #(#inner_nested),* ],
+                at_rules: vec![ #(#inner_at),* ],
+            }
+        }
     }).collect()
 }
 

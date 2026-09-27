@@ -33,8 +33,12 @@ fn parse_segments(cur: &mut Cursor, top_level: bool) -> Vec<ValueSegment> {
     let mut last_was_value = false;
 
     loop {
-        if cur.eof() { break; }
-        if top_level && (cur.peek_is_punct(';') || cur.peek_is_punct('!')) { break; }
+        if cur.eof() {
+            break;
+        }
+        if top_level && (cur.peek_is_punct(';') || cur.peek_is_punct('!')) {
+            break;
+        }
 
         match cur.peek().cloned() {
             Some(TokenTree::Punct(p)) if p.as_char() == '$' => {
@@ -72,7 +76,8 @@ fn parse_segments(cur: &mut Cursor, top_level: bool) -> Vec<ValueSegment> {
                     continue;
                 }
 
-                if matches!(cur.peek(), Some(TokenTree::Group(g)) if g.delimiter() == Delimiter::Parenthesis) {
+                if matches!(cur.peek(), Some(TokenTree::Group(g)) if g.delimiter() == Delimiter::Parenthesis)
+                {
                     let group = cur.expect_group(Delimiter::Parenthesis);
                     if name == "var" {
                         flush(&mut buf, &mut segments);
@@ -93,13 +98,15 @@ fn parse_segments(cur: &mut Cursor, top_level: bool) -> Vec<ValueSegment> {
                 }
 
                 let mut kw = name.replace('_', "-");
-                while cur.peek_is_punct('-') && matches!(cur.peek_at(1), Some(TokenTree::Ident(_))) {
+                while cur.peek_is_punct('-') && matches!(cur.peek_at(1), Some(TokenTree::Ident(_)))
+                {
                     cur.bump();
                     kw.push('-');
                     kw.push_str(&cur.expect_ident().to_string());
                 }
                 buf.push_str(&kw);
-                if !matches!(cur.peek(), Some(TokenTree::Group(g)) if g.delimiter() == Delimiter::Parenthesis) {
+                if !matches!(cur.peek(), Some(TokenTree::Group(g)) if g.delimiter() == Delimiter::Parenthesis)
+                {
                     buf.push(' ');
                 }
                 last_was_value = true;
@@ -136,7 +143,9 @@ fn parse_segments(cur: &mut Cursor, top_level: bool) -> Vec<ValueSegment> {
 
             Some(TokenTree::Punct(p)) if p.as_char() == ',' => {
                 cur.bump();
-                while buf.ends_with(' ') { buf.pop(); }
+                while buf.ends_with(' ') {
+                    buf.pop();
+                }
                 buf.push_str(", ");
                 last_was_value = false;
             }
@@ -155,7 +164,9 @@ fn parse_segments(cur: &mut Cursor, top_level: bool) -> Vec<ValueSegment> {
                     Delimiter::Brace => ("{", "}"),
                     Delimiter::None => ("", ""),
                 };
-                while buf.ends_with(' ') { buf.pop(); }
+                while buf.ends_with(' ') {
+                    buf.pop();
+                }
                 buf.push_str(open);
                 flush(&mut buf, &mut segments);
                 let mut inner = Cursor::new(g.stream());
@@ -203,10 +214,14 @@ fn flush(buf: &mut String, segments: &mut Vec<ValueSegment>) {
 fn trim_edges(segments: &mut Vec<ValueSegment>) {
     if let Some(ValueSegment::Literal(s)) = segments.first_mut() {
         *s = s.trim_start().to_string();
-        if s.is_empty() { segments.remove(0); }
+        if s.is_empty() {
+            segments.remove(0);
+        }
     }
     if let Some(ValueSegment::Literal(s)) = segments.last_mut() {
         *s = s.trim_end().to_string();
-        if s.is_empty() { segments.pop(); }
+        if s.is_empty() {
+            segments.pop();
+        }
     }
 }

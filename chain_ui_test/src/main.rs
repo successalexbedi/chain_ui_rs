@@ -1,4 +1,4 @@
-use axum::{http::header, response::IntoResponse, routing::get, Router};
+use axum::{Router, http::header, response::IntoResponse, routing::get};
 use chainui_rs::prelude::*;
 
 mod styles {
@@ -21,8 +21,25 @@ mod styles {
 
             // direct-child combinator — proves raw_html(): if this ever
             // renders as "&gt;" in /__css or view-source, the fix regressed
-            > .icon {
+           >.icon {
                 margin_right: fictreon_dark.spacing.sm;
+            }
+
+            // NEW — & block hosting a nested .class{} and @media{} inside
+            // it. This is the exact shape that broke as `&.selected .img_box{}`
+            // on one line; nesting it instead removes the ambiguity and
+            // should render as `.card_base.selected .badge { ... }` plus
+            // a media query scoped to that same compound selector.
+            &.selected {
+                border_color: "rgba(200,16,46,0.8)";
+
+                .badge {
+                    opacity: "1";
+                }
+
+                @media "(max-width: 640px)" {
+                    border_width: "2px";
+                }
             }
         });
     }
@@ -74,15 +91,14 @@ fn test_page() -> Element {
         )
         .child(
             tag::body()
-                // .style::<Marker>() — plain Element method, no separate import
                 .child(
                     tag::div()
                         .style::<CardBase>()
+                        .class("selected") // exercises the new &.selected{} block
                         .child(tag::span().class("icon").child("★"))
+                        .child(tag::span().class("badge").child("✓"))
                         .child("a card"),
                 )
-                // two .css_var() calls, one tag — view-source should show
-                // ONE style="--a:..;--b:..;" attribute
                 .child(
                     tag::button()
                         .style::<Button>()
@@ -91,7 +107,6 @@ fn test_page() -> Element {
                         .attr("data-variant", "primary")
                         .child("Primary"),
                 )
-                // .css_var() + .style_attr() mixed, different order — same check
                 .child(
                     tag::button()
                         .style::<Button>()
@@ -100,7 +115,6 @@ fn test_page() -> Element {
                         .disabled(true)
                         .child("Disabled"),
                 )
-                // closure-loop pattern — no `.render()`, elements just drop
                 .child(tag::ul().child(|| {
                     for i in 1..=3 {
                         tag::li().child(chain_fmt!("item {i}"));
@@ -132,9 +146,13 @@ async fn main() {
     let app = Router::new()
         .route("/__css", get(debug_css))
         .route("/", get(debug_page));
-    let listener = tokio::net::TcpListener::bind("127.0.0.1:3000").await.unwrap();
-    println!("running on http://127.0.0.1:3000 via chainui_rs facade");
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:4000")
+        .await
+        .unwrap();
+    println!("running on http://127.0.0.1:4000 via chainui_rs facade");
     println!("  GET /       — view-source, check for stray &gt; or duplicate style= attrs");
-    println!("  GET /__css  — raw + minified CSS");
+    println!(
+        "  GET /__css  — check .card_base.selected .badge and its @media block rendered correctly"
+    );
     axum::serve(listener, app).await.unwrap();
 }

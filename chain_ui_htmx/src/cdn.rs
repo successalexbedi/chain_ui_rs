@@ -4,5 +4,8 @@ pub fn htmx_cdn() -> Element {
     tag::script().attr("src", HTMX_CDN)
 }
 pub fn htmx_cdn_pinned(version: &str) -> Element {
-    tag::script().attr("src", chain_fmt!("https://cdn.jsdelivr.net/npm/htmx.org@{version}/dist/htmx.min.js"))
+    tag::script().attr(
+        "src",
+        chain_fmt!("https://cdn.jsdelivr.net/npm/htmx.org@{version}/dist/htmx.min.js"),
+    )
 }

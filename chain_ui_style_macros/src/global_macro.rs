@@ -12,7 +12,9 @@ pub fn expand(input: TokenStream) -> TokenStream {
         let group = cur.expect_group(Delimiter::Brace);
         let mut inner = Cursor::new(group.stream());
         let mut decls = Vec::new();
-        while !inner.eof() { decls.push(parse_declaration(&mut inner)); }
+        while !inner.eof() {
+            decls.push(parse_declaration(&mut inner));
+        }
         check_duplicates(&decls, &format!("global! `{selector}`"));
         blocks.push((selector, decls));
     }
@@ -46,8 +48,16 @@ fn parse_selector(cur: &mut Cursor) -> String {
     loop {
         match cur.peek() {
             Some(TokenTree::Group(g)) if g.delimiter() == Delimiter::Brace => break,
-            Some(TokenTree::Ident(i)) => { out.push_str(&i.to_string()); cur.bump(); out.push(' '); }
-            Some(TokenTree::Punct(p)) => { let ch = p.as_char(); cur.bump(); out.push(ch); }
+            Some(TokenTree::Ident(i)) => {
+                out.push_str(&i.to_string());
+                cur.bump();
+                out.push(' ');
+            }
+            Some(TokenTree::Punct(p)) => {
+                let ch = p.as_char();
+                cur.bump();
+                out.push(ch);
+            }
             other => panic!("chain_ui_style: unexpected token in global! selector: {other:?}"),
         }
     }

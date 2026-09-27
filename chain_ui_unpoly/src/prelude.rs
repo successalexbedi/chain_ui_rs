@@ -2,12 +2,12 @@
 //
 // use chain_ui_unpoly::prelude::*;
 
-pub use crate::attrs::{UpExt, Layer};
-pub use crate::headers::UpResponse;
+pub use crate::attrs::{Layer, UpExt};
+pub use crate::boot::unpoly_boot;
 pub use crate::cdn::{unpoly_cdn, unpoly_cdn_pinned};
-pub use crate::boot::unpoly_boot; 
 pub use crate::csrf::csrf_bootstrap;
+pub use crate::error::{IntoPageResult, PageError, PageResult};
+pub use crate::headers::UpResponse;
+pub use crate::up_page;
 pub use crate::validate::validating_field;
 pub use chain_ui_core::PageShell;
-pub use crate::error::{PageError, PageResult, IntoPageResult};
-pub use crate::up_page;

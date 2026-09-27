@@ -74,9 +74,12 @@ impl Hasher for IdentityHasher {
     }
     #[inline]
     fn write(&mut self, _bytes: &[u8]) {
-        // Fallback safety: If this hits, someone tried to use this hasher 
+        // Fallback safety: If this hits, someone tried to use this hasher
         // for something other than a u64 key.
-        debug_assert!(false, "IdentityHasher should only be used for primitive u64 keys!");
+        debug_assert!(
+            false,
+            "IdentityHasher should only be used for primitive u64 keys!"
+        );
     }
     #[inline]
     fn write_u64(&mut self, i: u64) {
@@ -211,7 +214,6 @@ where
     })
 }
 
-
 /// Unconditionally writes a value into the cache under `key`,
 /// overwriting whatever was there before (if anything). Unlike
 /// component(), this always runs — there's no generator closure to
@@ -264,7 +266,6 @@ pub fn set<K: Hash>(key_data: K, bytes: Vec<u8>) -> Arc<[u8]> {
         bytes
     })
 }
-
 
 /// Looks up a cached value WITHOUT generating on a miss. Returns None
 /// if nothing is cached under this key yet. Used by stale-while-
@@ -361,8 +362,7 @@ mod tests {
         });
         assert!(!executed_generator, "Key 0 was prematurely evicted!");
     }
-    
-    
+
     #[test]
     fn try_get_returns_none_on_miss_without_generating() {
         clear_local_cache();

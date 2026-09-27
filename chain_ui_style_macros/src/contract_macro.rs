@@ -29,14 +29,26 @@ fn collect_paths(cur: &mut Cursor, prefix: &str) -> Vec<String> {
             if g.delimiter() == Delimiter::Brace {
                 let group = cur.expect_group(Delimiter::Brace);
                 let mut nested = Cursor::new(group.stream());
-                let new_prefix = if prefix.is_empty() { name.to_string() } else { format!("{prefix}_{name}") };
+                let new_prefix = if prefix.is_empty() {
+                    name.to_string()
+                } else {
+                    format!("{prefix}_{name}")
+                };
                 out.extend(collect_paths(&mut nested, &new_prefix));
-                if cur.peek_is_punct(',') { cur.bump(); }
+                if cur.peek_is_punct(',') {
+                    cur.bump();
+                }
                 continue;
             }
         }
-        if cur.peek_is_punct(',') { cur.bump(); }
-        let full = if prefix.is_empty() { name.to_string() } else { format!("{prefix}_{name}") };
+        if cur.peek_is_punct(',') {
+            cur.bump();
+        }
+        let full = if prefix.is_empty() {
+            name.to_string()
+        } else {
+            format!("{prefix}_{name}")
+        };
         out.push(full);
     }
     out

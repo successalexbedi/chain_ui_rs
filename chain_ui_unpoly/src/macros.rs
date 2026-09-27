@@ -19,9 +19,14 @@ macro_rules! __up_page_respond {
         match $crate::IntoPageResult::into_page_result($result_expr) {
             Ok((title, content)) => {
                 if is_fragment {
-                    ($crate::UpResponse::new().title(title.as_str()), ::axum::response::Html(content.build().into_string())).into_response()
+                    (
+                        $crate::UpResponse::new().title(title.as_str()),
+                        ::axum::response::Html(content.build().into_string()),
+                    )
+                        .into_response()
                 } else {
-                    let html = <crate::AppShell as $crate::PageShell>::wrap(title.as_str(), content);
+                    let html =
+                        <crate::AppShell as $crate::PageShell>::wrap(title.as_str(), content);
                     ::axum::response::Html(html.build().into_string()).into_response()
                 }
             }
@@ -30,7 +35,9 @@ macro_rules! __up_page_respond {
                 let html_string = if is_fragment {
                     err.content.build().into_string()
                 } else {
-                    <crate::AppShell as $crate::PageShell>::wrap(err.title.as_str(), err.content).build().into_string()
+                    <crate::AppShell as $crate::PageShell>::wrap(err.title.as_str(), err.content)
+                        .build()
+                        .into_string()
                 };
                 (status, ::axum::response::Html(html_string)).into_response()
             }

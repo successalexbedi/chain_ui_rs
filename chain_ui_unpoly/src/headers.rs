@@ -70,10 +70,7 @@ impl UpResponse {
 impl IntoResponseParts for UpResponse {
     type Error = (StatusCode, String);
 
-    fn into_response_parts(
-        self,
-        mut res: ResponseParts,
-    ) -> Result<ResponseParts, Self::Error> {
+    fn into_response_parts(self, mut res: ResponseParts) -> Result<ResponseParts, Self::Error> {
         if let Some(e) = self.error {
             return Err((
                 StatusCode::INTERNAL_SERVER_ERROR,
@@ -89,8 +86,7 @@ impl IntoResponseParts for UpResponse {
                 )
             })?;
 
-            res.headers_mut()
-                .insert(HeaderName::from_static(k), val);
+            res.headers_mut().insert(HeaderName::from_static(k), val);
         }
 
         Ok(res)

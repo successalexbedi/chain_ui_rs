@@ -9,7 +9,8 @@ pub fn context_missing(type_name: &str, setter_name: &str) -> ! {
         format!("#[context({type_name})]"),
         format!(
             "No `{type_name}` context is active here.\nThis function must run inside `{setter_name}(value, async {{ ... }}).await` somewhere up the call stack.\n  at {}:{}",
-            loc.file(), loc.line()
+            loc.file(),
+            loc.line()
         )
     );
 }

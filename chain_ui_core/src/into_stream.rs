@@ -8,9 +8,9 @@
 // =====================================================================
 
 use crate::escape::escape_text;
-use crate::strings::ChainStr;
-use crate::stream::StreamBuf;
 use crate::scope::ScopeGuard;
+use crate::stream::StreamBuf;
+use crate::strings::ChainStr;
 
 #[diagnostic::on_unimplemented(
     message = "`{Self}` can't be used as a child — Chain UI doesn't know how to turn it into HTML",
@@ -148,4 +148,3 @@ pub trait HtmlElement {
     fn has_style(&self) -> bool;
     fn set_has_style(&mut self, val: bool);
 }
-

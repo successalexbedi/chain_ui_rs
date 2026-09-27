@@ -23,13 +23,19 @@ pub struct NestedRule {
     pub declarations: Vec<Declaration>,
     pub parent: Vec<ParentRule>,
     pub at_rules: Vec<AtRule>,
-    pub children: Vec<NestedRule>, // NEW — nested .class{}/>.class{} blocks inside this one
+    pub children: Vec<NestedRule>,
 }
 
-#[derive(Debug, Clone)]
+/// A `&suffix{}` block. Can now hold its own nested `.class{}`/`>.class{}`
+/// blocks and `@media{}` at-rules, exactly like NestedRule — this is what
+/// makes `&.selected { .img_box { ... } }` compile to
+/// `.marker.selected .img_box { ... }`.
+#[derive(Debug, Clone, Default)]
 pub struct ParentRule {
     pub suffix: String,
     pub declarations: Vec<Declaration>,
+    pub nested: Vec<NestedRule>,
+    pub at_rules: Vec<AtRule>,
 }
 
 /// Generalized at-rule: kind is "media" | "supports" | "container".

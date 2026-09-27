@@ -19,39 +19,60 @@ pub struct Cursor {
 
 impl Cursor {
     pub fn new(stream: TokenStream) -> Self {
-        Self { tokens: stream.into_iter().collect(), pos: 0 }
+        Self {
+            tokens: stream.into_iter().collect(),
+            pos: 0,
+        }
     }
-    pub fn peek(&self) -> Option<&TokenTree> { self.tokens.get(self.pos) }
-    pub fn peek_at(&self, offset: usize) -> Option<&TokenTree> { self.tokens.get(self.pos + offset) }
+    pub fn peek(&self) -> Option<&TokenTree> {
+        self.tokens.get(self.pos)
+    }
+    pub fn peek_at(&self, offset: usize) -> Option<&TokenTree> {
+        self.tokens.get(self.pos + offset)
+    }
     pub fn bump(&mut self) -> Option<TokenTree> {
         let t = self.tokens.get(self.pos).cloned();
         self.pos += 1;
         t
     }
-    pub fn eof(&self) -> bool { self.pos >= self.tokens.len() }
+    pub fn eof(&self) -> bool {
+        self.pos >= self.tokens.len()
+    }
 
     pub fn expect_ident(&mut self) -> Ident {
         match self.bump() {
             Some(TokenTree::Ident(i)) => i,
-            other => panic!("chain_ui_style: expected an identifier, found {}", describe_token(other.as_ref())),
+            other => panic!(
+                "chain_ui_style: expected an identifier, found {}",
+                describe_token(other.as_ref())
+            ),
         }
     }
     pub fn expect_literal(&mut self) -> Literal {
         match self.bump() {
             Some(TokenTree::Literal(l)) => l,
-            other => panic!("chain_ui_style: expected a literal value (e.g. \"...\" or 16px), found {}", describe_token(other.as_ref())),
+            other => panic!(
+                "chain_ui_style: expected a literal value (e.g. \"...\" or 16px), found {}",
+                describe_token(other.as_ref())
+            ),
         }
     }
     pub fn expect_group(&mut self, delim: Delimiter) -> Group {
         match self.bump() {
             Some(TokenTree::Group(g)) if g.delimiter() == delim => g,
-            other => panic!("chain_ui_style: expected a `{{...}}` block, found {}", describe_token(other.as_ref())),
+            other => panic!(
+                "chain_ui_style: expected a `{{...}}` block, found {}",
+                describe_token(other.as_ref())
+            ),
         }
     }
     pub fn expect_punct(&mut self, ch: char) -> Punct {
         match self.bump() {
             Some(TokenTree::Punct(p)) if p.as_char() == ch => p,
-            other => panic!("chain_ui_style: expected `{ch}`, found {}", describe_token(other.as_ref())),
+            other => panic!(
+                "chain_ui_style: expected `{ch}`, found {}",
+                describe_token(other.as_ref())
+            ),
         }
     }
     pub fn peek_is_punct(&self, ch: char) -> bool {

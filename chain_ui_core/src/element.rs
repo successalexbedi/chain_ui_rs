@@ -10,9 +10,9 @@
 
 use crate::chain_panic;
 use crate::into_stream::{ChainMarkup, HtmlElement, IntoStream};
-use crate::stream::StreamBuf;
-use crate::tag_dict::{is_legal_tag, LEGAL_CONTAINERS, LEGAL_VOIDS};
 use crate::scope::append_to_active;
+use crate::stream::StreamBuf;
+use crate::tag_dict::{LEGAL_CONTAINERS, LEGAL_VOIDS, is_legal_tag};
 
 #[cfg(debug_assertions)]
 use crate::tag_dict::{is_custom_element_name, suggest_closest_tag};
@@ -37,7 +37,8 @@ impl Element {
                 let msg = if is_legal_tag(tag, LEGAL_VOIDS) {
                     format!(
                         "'{tag}' is a self-closing tag in real HTML — it can never hold children.\nUse VoidElement::new(\"{tag}\") or tag::{tag}() instead.\n  at {}:{}",
-                        loc.file(), loc.line()
+                        loc.file(),
+                        loc.line()
                     )
                 } else if let Some(suggestion) = suggest_closest_tag(tag) {
                     format!(
@@ -197,7 +198,8 @@ impl VoidElement {
                 let msg = if is_legal_tag(tag, LEGAL_CONTAINERS) {
                     format!(
                         "'{tag}' is a normal container tag in real HTML — it can hold children.\nUse Element::new(\"{tag}\") or tag::{tag}() instead.\n  at {}:{}",
-                        loc.file(), loc.line()
+                        loc.file(),
+                        loc.line()
                     )
                 } else if let Some(suggestion) = suggest_closest_tag(tag) {
                     format!(
@@ -299,30 +301,54 @@ impl std::fmt::Debug for VoidElement {
 
 impl HtmlElement for Element {
     #[inline(always)]
-    fn stream(&mut self) -> &mut StreamBuf { &mut self.buf }
+    fn stream(&mut self) -> &mut StreamBuf {
+        &mut self.buf
+    }
     #[inline(always)]
-    fn is_head_closed(&self) -> bool { self.head_closed }
+    fn is_head_closed(&self) -> bool {
+        self.head_closed
+    }
     #[inline(always)]
-    fn has_class(&self) -> bool { self.has_class }
+    fn has_class(&self) -> bool {
+        self.has_class
+    }
     #[inline(always)]
-    fn set_has_class(&mut self, val: bool) { self.has_class = val; }
+    fn set_has_class(&mut self, val: bool) {
+        self.has_class = val;
+    }
     #[inline(always)]
-    fn has_style(&self) -> bool { self.has_style }
+    fn has_style(&self) -> bool {
+        self.has_style
+    }
     #[inline(always)]
-    fn set_has_style(&mut self, val: bool) { self.has_style = val; }
+    fn set_has_style(&mut self, val: bool) {
+        self.has_style = val;
+    }
 }
 
 impl HtmlElement for VoidElement {
     #[inline(always)]
-    fn stream(&mut self) -> &mut StreamBuf { &mut self.buf }
+    fn stream(&mut self) -> &mut StreamBuf {
+        &mut self.buf
+    }
     #[inline(always)]
-    fn is_head_closed(&self) -> bool { false }
+    fn is_head_closed(&self) -> bool {
+        false
+    }
     #[inline(always)]
-    fn has_class(&self) -> bool { self.has_class }
+    fn has_class(&self) -> bool {
+        self.has_class
+    }
     #[inline(always)]
-    fn set_has_class(&mut self, val: bool) { self.has_class = val; }
+    fn set_has_class(&mut self, val: bool) {
+        self.has_class = val;
+    }
     #[inline(always)]
-    fn has_style(&self) -> bool { self.has_style }
+    fn has_style(&self) -> bool {
+        self.has_style
+    }
     #[inline(always)]
-    fn set_has_style(&mut self, val: bool) { self.has_style = val; }
+    fn set_has_style(&mut self, val: bool) {
+        self.has_style = val;
+    }
 }

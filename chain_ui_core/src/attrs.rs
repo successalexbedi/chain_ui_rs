@@ -20,7 +20,6 @@ pub trait ClassMarker {
     const NAME: &'static str;
 }
 
-
 macro_rules! impl_attr_methods {
     ($t:ty) => {
         impl $t {
@@ -244,7 +243,7 @@ macro_rules! impl_attr_methods {
             // ---------------------------------------------------------
 
             #[inline(always)]
-            
+
 #[track_caller]
 pub fn style_attr(mut self, css: impl Into<ChainStr>) -> Self {
     let c_val = css.into();

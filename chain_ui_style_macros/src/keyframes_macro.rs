@@ -17,19 +17,26 @@ pub fn expand(input: TokenStream) -> TokenStream {
     let mut stops = Vec::new();
     while !body.eof() {
         let label = if body.peek_is_ident("from") {
-            body.bump(); "from".to_string()
+            body.bump();
+            "from".to_string()
         } else if body.peek_is_ident("to") {
-            body.bump(); "to".to_string()
+            body.bump();
+            "to".to_string()
         } else {
             let lit = body.expect_literal();
             let mut s = lit.to_string();
-            if body.peek_is_punct('%') { body.bump(); s.push('%'); }
+            if body.peek_is_punct('%') {
+                body.bump();
+                s.push('%');
+            }
             s
         };
         let sgroup = body.expect_group(Delimiter::Brace);
         let mut sinner = Cursor::new(sgroup.stream());
         let mut decls = Vec::new();
-        while !sinner.eof() { decls.push(parse_declaration(&mut sinner)); }
+        while !sinner.eof() {
+            decls.push(parse_declaration(&mut sinner));
+        }
         stops.push((label, decls));
     }
 

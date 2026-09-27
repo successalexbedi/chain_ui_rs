@@ -1,6 +1,6 @@
+use crate::stream::StreamBuf;
 use std::cell::RefCell;
 use std::marker::PhantomData;
-use crate::stream::StreamBuf;
 
 thread_local! {
     static ACTIVE_STREAM: RefCell<Option<*mut StreamBuf>> = const { RefCell::new(None) };
@@ -21,7 +21,10 @@ impl<'a> ScopeGuard<'a> {
     #[inline(always)]
     pub fn enter(buf: &'a mut StreamBuf) -> Self {
         let prev = ACTIVE_STREAM.with(|s| s.replace(Some(buf as *mut StreamBuf)));
-        ScopeGuard { prev, _marker: PhantomData }
+        ScopeGuard {
+            prev,
+            _marker: PhantomData,
+        }
     }
 }
 

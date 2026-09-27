@@ -31,41 +31,43 @@ pub fn expand(input: TokenStream) -> TokenStream {
 
         while !kcur.eof() {
             let key = kcur.expect_ident();
-            if kcur.peek_is_punct(',') { kcur.bump(); }
+            if kcur.peek_is_punct(',') {
+                kcur.bump();
+            }
 
             let class_name = format!("{}_{}", property, key);
             let marker = format_ident!("{}", snake_to_pascal(&class_name));
             let prop_str = property.to_string();
 
             generated.push(quote! {
-    #[allow(non_camel_case_types)]
-    pub struct #marker;
+                #[allow(non_camel_case_types)]
+                pub struct #marker;
 
-    impl chain_ui_core::ClassMarker for #marker {
-        const NAME: &'static str = #class_name;
-    }
+                impl chain_ui_core::ClassMarker for #marker {
+                    const NAME: &'static str = #class_name;
+                }
 
-    impl chain_ui_style::registry::StyleDef for #marker {
-        fn build() -> chain_ui_style::ast::Style {
-            chain_ui_style::ast::Style {
-                name: #class_name.into(),
-                uses: vec![],
-                declarations: vec![
-                    chain_ui_style::ast::Declaration {
-                        property: #prop_str,
-                        value: (#theme_mod::#submodule::#key).to_string(),
+                impl chain_ui_style::registry::StyleDef for #marker {
+                    fn build() -> chain_ui_style::ast::Style {
+                        chain_ui_style::ast::Style {
+                            name: #class_name.into(),
+                            uses: vec![],
+                            declarations: vec![
+                                chain_ui_style::ast::Declaration {
+                                    property: #prop_str,
+                                    value: (#theme_mod::#submodule::#key).to_string(),
+                                }
+                            ],
+                            nested: vec![],
+                            parent: vec![],
+                            at_rules: vec![],
+                            raw: vec![],
+                            is_global: false,
+                            selector_override: None,
+                        }
                     }
-                ],
-                nested: vec![],
-                parent: vec![],
-                at_rules: vec![],
-                raw: vec![],
-                is_global: false,
-                selector_override: None,
-            }
-        }
-    }
-});
+                }
+            });
         }
     }
 

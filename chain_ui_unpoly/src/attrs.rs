@@ -47,19 +47,19 @@ pub trait UpExt: Sized {
     fn up_transition(self, transition: impl Into<ChainStr>) -> Self {
         self.attr_raw("up-transition", transition)
     }
-    
+
     #[inline(always)]
-fn up_autosubmit(self) -> Self {
-    self.flag_raw("up-autosubmit")
-}
-#[inline(always)]
-fn up_watch_delay(self, ms: u64) -> Self {
-    self.attr_raw("up-watch-delay", chain_fmt!("{ms}"))
-}
-#[inline(always)]
-fn up_watch_event(self, event: &'static str) -> Self {
-    self.attr_raw("up-watch-event", event)
-}
+    fn up_autosubmit(self) -> Self {
+        self.flag_raw("up-autosubmit")
+    }
+    #[inline(always)]
+    fn up_watch_delay(self, ms: u64) -> Self {
+        self.attr_raw("up-watch-delay", chain_fmt!("{ms}"))
+    }
+    #[inline(always)]
+    fn up_watch_event(self, event: &'static str) -> Self {
+        self.attr_raw("up-watch-event", event)
+    }
 }
 
 /// Typed instead of a raw string — up_layer("new") can't typo into

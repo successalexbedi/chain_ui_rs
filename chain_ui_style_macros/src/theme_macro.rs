@@ -34,7 +34,10 @@ pub fn expand(input: TokenStream) -> TokenStream {
             loop {
                 let kf_name = body.expect_ident();
                 keyframe_fns.push(format_ident!("{}_keyframes", kf_name));
-                if body.peek_is_punct(',') { body.bump(); continue; }
+                if body.peek_is_punct(',') {
+                    body.bump();
+                    continue;
+                }
                 break;
             }
             body.expect_punct(';');
@@ -60,35 +63,35 @@ pub fn expand(input: TokenStream) -> TokenStream {
     };
 
     quote! {
-        #[cold]
-        fn #build_fn_name() -> String {
-            let mut styles: Vec<chain_ui_style::ast::Style> = Vec::new();
-            #global_extend
-            #( styles.push(<#markers as chain_ui_style::registry::StyleDef>::build()); )*
+            #[cold]
+            fn #build_fn_name() -> String {
+                let mut styles: Vec<chain_ui_style::ast::Style> = Vec::new();
+                #global_extend
+                #( styles.push(<#markers as chain_ui_style::registry::StyleDef>::build()); )*
 
-            let mut css = chain_ui_style::render::render_css(styles);
-            #( css.push_str(&chain_ui_style::render::render_keyframes(&#keyframe_fns())); )*
+                let mut css = chain_ui_style::render::render_css(styles);
+                #( css.push_str(&chain_ui_style::render::render_keyframes(&#keyframe_fns())); )*
 
-            // dev builds stay readable for debugging via /__css;
-            // release builds ship minified automatically, no
-            // separate feature flag or config needed
-            if cfg!(debug_assertions) {
-                css
-            } else {
-                chain_ui_style::render::minify(&css)
+                // dev builds stay readable for debugging via /__css;
+                // release builds ship minified automatically, no
+                // separate feature flag or config needed
+                if cfg!(debug_assertions) {
+                    css
+                } else {
+                    chain_ui_style::render::minify(&css)
+                }
             }
-        }
 
-        #[inline]
-        pub fn #css_fn_name() -> &'static str {
-            static CSS: std::sync::OnceLock<String> = std::sync::OnceLock::new();
-            CSS.get_or_init(#build_fn_name)
-        }
+            #[inline]
+            pub fn #css_fn_name() -> &'static str {
+                static CSS: std::sync::OnceLock<String> = std::sync::OnceLock::new();
+                CSS.get_or_init(#build_fn_name)
+            }
 
-        #[inline]
-        
-pub fn #fn_name() -> chain_ui_core::Element {
-    chain_ui_core::tag::style().child(chain_ui_core::raw_html(#css_fn_name()))
-}
+            #[inline]
+
+    pub fn #fn_name() -> chain_ui_core::Element {
+        chain_ui_core::tag::style().child(chain_ui_core::raw_html(#css_fn_name()))
     }
+        }
 }

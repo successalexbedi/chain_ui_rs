@@ -1,26 +1,28 @@
 mod contract_macro;
 mod cursor;
 mod global_macro;
-mod keyframes_macro;  
+mod keyframes_macro;
 mod known_values;
+mod sprinkles_macro;
 mod style_macro;
 mod theme_macro;
 mod tokens_macro;
 mod value;
-mod value_parser;      
-mod sprinkles_macro; 
-
+mod value_parser;
 
 use proc_macro::TokenStream;
 use quote::quote;
-use std::panic::{catch_unwind, AssertUnwindSafe};
+use std::panic::{AssertUnwindSafe, catch_unwind};
 
 fn panic_message(payload: Box<dyn std::any::Any + Send>) -> String {
-    if let Some(s) = payload.downcast_ref::<&str>() { s.to_string() }
-    else if let Some(s) = payload.downcast_ref::<String>() { s.clone() }
-    else { "chain_ui_style: an internal parser error occurred".to_string() }
+    if let Some(s) = payload.downcast_ref::<&str>() {
+        s.to_string()
+    } else if let Some(s) = payload.downcast_ref::<String>() {
+        s.clone()
+    } else {
+        "chain_ui_style: an internal parser error occurred".to_string()
+    }
 }
-
 
 #[proc_macro]
 pub fn sprinkles(input: TokenStream) -> TokenStream {

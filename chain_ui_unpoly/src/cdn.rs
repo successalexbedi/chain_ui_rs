@@ -10,11 +10,14 @@ const UNPOLY_CDN_BASE: &str = "https://cdn.jsdelivr.net/npm/unpoly";
 /// streamed together, no Fragment machinery needed.
 pub fn unpoly_cdn() -> impl IntoStream {
     (
-        tag::link()
-            .attr("rel", "stylesheet")
-            .attr("href", chain_fmt!("{UNPOLY_CDN_BASE}@latest/dist/unpoly.min.css")),
-        tag::script()
-            .attr("src", chain_fmt!("{UNPOLY_CDN_BASE}@latest/dist/unpoly.min.js")),
+        tag::link().attr("rel", "stylesheet").attr(
+            "href",
+            chain_fmt!("{UNPOLY_CDN_BASE}@latest/dist/unpoly.min.css"),
+        ),
+        tag::script().attr(
+            "src",
+            chain_fmt!("{UNPOLY_CDN_BASE}@latest/dist/unpoly.min.js"),
+        ),
     )
 }
 
@@ -25,10 +28,13 @@ pub fn unpoly_cdn() -> impl IntoStream {
 /// build being stable across days.
 pub fn unpoly_cdn_pinned(version: &str) -> impl IntoStream {
     (
-        tag::link()
-            .attr("rel", "stylesheet")
-            .attr("href", chain_fmt!("{UNPOLY_CDN_BASE}@{version}/dist/unpoly.min.css")),
-        tag::script()
-            .attr("src", chain_fmt!("{UNPOLY_CDN_BASE}@{version}/dist/unpoly.min.js")),
+        tag::link().attr("rel", "stylesheet").attr(
+            "href",
+            chain_fmt!("{UNPOLY_CDN_BASE}@{version}/dist/unpoly.min.css"),
+        ),
+        tag::script().attr(
+            "src",
+            chain_fmt!("{UNPOLY_CDN_BASE}@{version}/dist/unpoly.min.js"),
+        ),
     )
 }

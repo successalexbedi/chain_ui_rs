@@ -1,6 +1,6 @@
 use proc_macro::TokenStream;
 use quote::{format_ident, quote};
-use syn::{parse_macro_input, punctuated::Punctuated, Ident, Item, Token};
+use syn::{Ident, Item, Token, parse_macro_input, punctuated::Punctuated};
 
 /// Two completely different jobs live under one attribute name,
 /// distinguished by what it's attached to:
@@ -21,7 +21,10 @@ pub fn context(attr: TokenStream, item: TokenStream) -> TokenStream {
     }
 }
 
-struct StructArgs { name: Ident, ty: Ident }
+struct StructArgs {
+    name: Ident,
+    ty: Ident,
+}
 impl syn::parse::Parse for StructArgs {
     fn parse(input: syn::parse::ParseStream) -> syn::Result<Self> {
         let name: Ident = input.parse()?;
@@ -56,7 +59,10 @@ fn context_on_struct(attr: TokenStream, item_struct: syn::ItemStruct) -> TokenSt
     .into()
 }
 
-struct FnArgs { name: Ident, fields: Punctuated<Ident, Token![,]> }
+struct FnArgs {
+    name: Ident,
+    fields: Punctuated<Ident, Token![,]>,
+}
 impl syn::parse::Parse for FnArgs {
     fn parse(input: syn::parse::ParseStream) -> syn::Result<Self> {
         let name: Ident = input.parse()?;
@@ -80,7 +86,9 @@ fn context_on_fn(attr: TokenStream, mut item_fn: syn::ItemFn) -> TokenStream {
     // a typo'd field name gets blamed at the exact typo, not at the
     // macro-generated block as a whole.
     let bindings = fields.iter().map(|f| quote_spanned!(f.span()=> #f));
-    let accesses = fields.iter().map(|f| quote_spanned!(f.span()=> __ctx.#f.clone()));
+    let accesses = fields
+        .iter()
+        .map(|f| quote_spanned!(f.span()=> __ctx.#f.clone()));
 
     let block = &item_fn.block;
     let new_block: syn::Block = syn::parse_quote! {{

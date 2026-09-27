@@ -13,8 +13,6 @@ macro_rules! hx_page {
     };
 }
 
-
-
 #[macro_export]
 macro_rules! hx_page_with_optional_user {
     ($handler:ident, $builder:ident) => {

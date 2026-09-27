@@ -4,9 +4,7 @@ use std::io::IsTerminal;
 
 #[macro_export]
 macro_rules! chain_panic {
-    ($target:expr, $msg:expr) => {{
-        $crate::panic::render_panic($target.to_string(), $msg.to_string())
-    }};
+    ($target:expr, $msg:expr) => {{ $crate::panic::render_panic($target.to_string(), $msg.to_string()) }};
 }
 
 /// Does the actual formatting/printing, kept as a real function (not
