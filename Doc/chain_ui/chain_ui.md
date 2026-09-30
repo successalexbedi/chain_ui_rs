@@ -916,3 +916,7 @@ Real issues found and fixed while integrating these two crates on a real project
 | `render::minify(css: &str) -> String` | Whitespace-collapsing minifier, used automatically in release builds |
 | `registry::StyleDef` trait | `: chain_ui_core::ClassMarker { fn build() -> Style; }`, see §25 |
 | `ast::{Style, Declaration, NestedRule, ParentRule, AtRule, RawRule, Keyframes}` | The AST types — `NestedRule` carries a `children: Vec<NestedRule>` field enabling arbitrary-depth nesting (§17) |
+
+
+
+

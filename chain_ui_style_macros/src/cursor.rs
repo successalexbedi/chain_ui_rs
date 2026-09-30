@@ -60,10 +60,20 @@ impl Cursor {
     pub fn expect_group(&mut self, delim: Delimiter) -> Group {
         match self.bump() {
             Some(TokenTree::Group(g)) if g.delimiter() == delim => g,
-            other => panic!(
-                "chain_ui_style: expected a `{{...}}` block, found {}",
-                describe_token(other.as_ref())
-            ),
+            other => {
+                let (open, close) = match delim {
+                    Delimiter::Brace => ("{", "}"),
+                    Delimiter::Parenthesis => ("(", ")"),
+                    Delimiter::Bracket => ("[", "]"),
+                    Delimiter::None => ("", ""),
+                };
+                panic!(
+                    "chain_ui_style: expected a `{} ... {}` block, found {}",
+                    open,
+                    close,
+                    describe_token(other.as_ref())
+                )
+            }
         }
     }
     pub fn expect_punct(&mut self, ch: char) -> Punct {
@@ -80,5 +90,54 @@ impl Cursor {
     }
     pub fn peek_is_ident(&self, s: &str) -> bool {
         matches!(self.peek(), Some(TokenTree::Ident(i)) if i == s)
+    }
+
+    /// Reads a CSS-style dashed name the way a stylesheet writes it:
+    ///   font-size            font_size (underscores are kept, callers normalize)
+    ///   --bg-base            custom property
+    ///   -webkit-box-orient   vendor prefix
+    ///   --space-2            digit segments
+    /// Rust's tokenizer hands us `-` and each word as separate tokens, so
+    /// this glues them back together. Returns the name verbatim, dashes included.
+    pub fn parse_dashed_ident(&mut self) -> String {
+        let mut out = String::new();
+
+        while self.peek_is_punct('-') {
+            self.bump();
+            out.push('-');
+        }
+
+        match self.bump() {
+            Some(TokenTree::Ident(i)) => out.push_str(&i.to_string()),
+            other => panic!(
+                "chain_ui_style: expected a name (like `font-size` or `--my-var`), found {}",
+                describe_token(other.as_ref())
+            ),
+        }
+
+        loop {
+            if !self.peek_is_punct('-') {
+                break;
+            }
+            let continues = match self.peek_at(1) {
+                Some(TokenTree::Ident(_)) => true,
+                Some(TokenTree::Literal(l)) => l
+                    .to_string()
+                    .chars()
+                    .all(|c| c.is_ascii_alphanumeric() || c == '_'),
+                _ => false,
+            };
+            if !continues {
+                break;
+            }
+            self.bump();
+            out.push('-');
+            match self.bump() {
+                Some(TokenTree::Ident(i)) => out.push_str(&i.to_string()),
+                Some(TokenTree::Literal(l)) => out.push_str(&l.to_string()),
+                _ => unreachable!(),
+            }
+        }
+        out
     }
 }

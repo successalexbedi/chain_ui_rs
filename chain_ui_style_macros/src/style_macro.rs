@@ -66,17 +66,9 @@ pub fn expand(input: TokenStream) -> TokenStream {
             continue;
         }
 
-        if body.peek_is_ident("css") {
-            body.bump();
-            let group = body.expect_group(Delimiter::Brace);
-            let mut inner = Cursor::new(group.stream());
-            while !inner.eof() {
-                let prop = parse_property_name(&mut inner);
-                inner.expect_punct(':');
-                let value = parse_raw_css_value(&mut inner);
-                inner.expect_punct(';');
-                decls.push(Decl { property: prop, value: single_literal(value) });
-            }
+        // css { ... } raw escape block (vendor prefixes etc.)
+        if is_css_block(&body) {
+            parse_decl_item(&mut body, &mut decls);
             continue;
         }
 
@@ -95,7 +87,7 @@ pub fn expand(input: TokenStream) -> TokenStream {
                     rat.push(AtRuleSrc { kind, query, decls: adecls });
                     continue;
                 }
-                rdecls.push(parse_declaration(&mut inner));
+                parse_decl_item(&mut inner, &mut rdecls);
             }
             check_duplicates(&rdecls, &format!("selector \"{sel}\" inside `{name}`"));
             raw.push(Raw { selector: sel, decls: rdecls, at_rules: rat });
@@ -123,7 +115,7 @@ pub fn expand(input: TokenStream) -> TokenStream {
                 let vgroup = inner.expect_group(Delimiter::Brace);
                 let mut vinner = Cursor::new(vgroup.stream());
                 let mut vdecls = Vec::new();
-                while !vinner.eof() { vdecls.push(parse_declaration(&mut vinner)); }
+                while !vinner.eof() { parse_decl_item(&mut vinner, &mut vdecls); }
                 check_duplicates(&vdecls, &format!("variant `{value_name}` inside `{name}`"));
                 parent.push(Parent { suffix: format!(".{value_name}"), decls: vdecls, nested: Vec::new(), at_rules: Vec::new() });
             }
@@ -149,7 +141,7 @@ pub fn expand(input: TokenStream) -> TokenStream {
             let group = body.expect_group(Delimiter::Brace);
             let mut inner = Cursor::new(group.stream());
             let mut cdecls = Vec::new();
-            while !inner.eof() { cdecls.push(parse_declaration(&mut inner)); }
+            while !inner.eof() { parse_decl_item(&mut inner, &mut cdecls); }
             check_duplicates(&cdecls, &format!("compound{suffix} inside `{name}`"));
             parent.push(Parent { suffix, decls: cdecls, nested: Vec::new(), at_rules: Vec::new() });
             continue;
@@ -159,7 +151,6 @@ pub fn expand(input: TokenStream) -> TokenStream {
             body.bump();
             body.expect_punct('.');
             let sel_name = parse_class_selector_name(&mut body);
-            // ...rest unchanged, using sel_name instead of sel_ident
             let group = body.expect_group(Delimiter::Brace);
             let mut inner = Cursor::new(group.stream());
             let ctx = format!("> .{sel_name} inside `{name}`");
@@ -176,22 +167,22 @@ pub fn expand(input: TokenStream) -> TokenStream {
         }
 
         if body.peek_is_punct('.') {
-         body.bump();
-        let sel_name = parse_class_selector_name(&mut body);
-        let group = body.expect_group(Delimiter::Brace);
-        let mut inner = Cursor::new(group.stream());
-        let ctx = format!(".{sel_name} inside `{name}`");
-        let (inner_decls, inner_parent, inner_at, inner_children) = parse_nested_body(&mut inner, &ctx);
-        check_duplicates(&inner_decls, &ctx);
-        nested.push(Nested {
-        selector: format!(".{sel_name}"),
-        decls: inner_decls,
-        parent: inner_parent,
-        at_rules: inner_at,
-        children: inner_children,
-    });
-    continue;
-}
+            body.bump();
+            let sel_name = parse_class_selector_name(&mut body);
+            let group = body.expect_group(Delimiter::Brace);
+            let mut inner = Cursor::new(group.stream());
+            let ctx = format!(".{sel_name} inside `{name}`");
+            let (inner_decls, inner_parent, inner_at, inner_children) = parse_nested_body(&mut inner, &ctx);
+            check_duplicates(&inner_decls, &ctx);
+            nested.push(Nested {
+                selector: format!(".{sel_name}"),
+                decls: inner_decls,
+                parent: inner_parent,
+                at_rules: inner_at,
+                children: inner_children,
+            });
+            continue;
+        }
 
         if body.peek_is_punct('&') {
             body.bump();
@@ -208,23 +199,19 @@ pub fn expand(input: TokenStream) -> TokenStream {
     codegen(&name, &uses, decls, nested, parent, at_rules, raw)
 }
 
-/// Parses the name after a `.` in a class selector. Two forms:
-///   .classname          — a plain Rust identifier (existing, unchanged)
-///   .$"my-class"         — a raw string literal, for names that aren't
-///                          legal Rust identifiers (hyphens, leading
-///                          digits, etc.) — `$` here means "raw string
-///                          follows", distinct from `${expr}` which is
-///                          `$` followed by a brace group.
+/// Parses the name after a `.` in a class selector. Forms:
+///   .classname          — plain identifier
+///   .my-class           — dashed, CSS style
+///   .$"my-class"        — raw string, for anything else
 fn parse_class_selector_name(cur: &mut Cursor) -> String {
     if cur.peek_is_punct('$') {
         cur.bump();
         let lit = cur.expect_literal();
         lit.to_string().trim_matches('"').to_string()
     } else {
-        cur.expect_ident().to_string()
+        cur.parse_dashed_ident()
     }
 }
-
 
 fn parse_at_rule(cur: &mut Cursor) -> (String, String, Vec<Decl>) {
     cur.expect_punct('@');
@@ -240,16 +227,13 @@ fn parse_at_rule(cur: &mut Cursor) -> (String, String, Vec<Decl>) {
     let group = cur.expect_group(Delimiter::Brace);
     let mut inner = Cursor::new(group.stream());
     let mut decls = Vec::new();
-    while !inner.eof() { decls.push(parse_declaration(&mut inner)); }
+    while !inner.eof() { parse_decl_item(&mut inner, &mut decls); }
     (kind, query, decls)
 }
 
 /// Parses a `&suffix { ... }` block's body using the exact same
-/// grammar as a `.class{}` block — so `&.selected { .img_box { ... } }`
-/// and `&.slot_1 { @media "..." { ... } }` both work. Nested `&{}`
-/// inside this block (i.e. `&` inside `&`) is deliberately rejected
-/// with a clear message rather than silently dropped, since chaining
-/// two `&` suffixes has no unambiguous CSS meaning here.
+/// grammar as a `.class{}` block. Nested `&{}` inside this block is
+/// deliberately rejected with a clear message rather than silently dropped.
 fn parse_parent_block(cur: &mut Cursor, suffix: String, context: &str) -> Parent {
     let group = cur.expect_group(Delimiter::Brace);
     let mut inner = Cursor::new(group.stream());
@@ -267,7 +251,7 @@ fn parse_parent_block(cur: &mut Cursor, suffix: String, context: &str) -> Parent
 }
 
 /// Parses the body of a `.class{}`/`>.class{}`/`&suffix{}` block.
-/// Recognizes `&...{}`, `@media/...{}`, and `.class{}`/`>.class{}`
+/// Recognizes `&...{}`, `@media/...{}`, `css {}` and `.class{}`/`>.class{}`
 /// recursively — so nesting goes arbitrarily deep in every direction.
 fn parse_nested_body(cur: &mut Cursor, context: &str) -> (Vec<Decl>, Vec<Parent>, Vec<AtRuleSrc>, Vec<Nested>) {
     let mut decls = Vec::new();
@@ -292,14 +276,14 @@ fn parse_nested_body(cur: &mut Cursor, context: &str) -> (Vec<Decl>, Vec<Parent>
         if cur.peek_is_punct('>') {
             cur.bump();
             cur.expect_punct('.');
-            let sel_ident = cur.expect_ident();
+            let sel_name = parse_class_selector_name(cur);
             let group = cur.expect_group(Delimiter::Brace);
             let mut inner = Cursor::new(group.stream());
-            let sub_ctx = format!("> .{sel_ident} inside {context}");
+            let sub_ctx = format!("> .{sel_name} inside {context}");
             let (inner_decls, inner_parent, inner_at, inner_children) = parse_nested_body(&mut inner, &sub_ctx);
             check_duplicates(&inner_decls, &sub_ctx);
             children.push(Nested {
-                selector: format!("> .{sel_ident}"),
+                selector: format!("> .{sel_name}"),
                 decls: inner_decls,
                 parent: inner_parent,
                 at_rules: inner_at,
@@ -309,14 +293,14 @@ fn parse_nested_body(cur: &mut Cursor, context: &str) -> (Vec<Decl>, Vec<Parent>
         }
         if cur.peek_is_punct('.') {
             cur.bump();
-            let sel_ident = cur.expect_ident();
+            let sel_name = parse_class_selector_name(cur);
             let group = cur.expect_group(Delimiter::Brace);
             let mut inner = Cursor::new(group.stream());
-            let sub_ctx = format!(".{sel_ident} inside {context}");
+            let sub_ctx = format!(".{sel_name} inside {context}");
             let (inner_decls, inner_parent, inner_at, inner_children) = parse_nested_body(&mut inner, &sub_ctx);
             check_duplicates(&inner_decls, &sub_ctx);
             children.push(Nested {
-                selector: format!(".{sel_ident}"),
+                selector: format!(".{sel_name}"),
                 decls: inner_decls,
                 parent: inner_parent,
                 at_rules: inner_at,
@@ -324,7 +308,7 @@ fn parse_nested_body(cur: &mut Cursor, context: &str) -> (Vec<Decl>, Vec<Parent>
             });
             continue;
         }
-        decls.push(parse_declaration(cur));
+        parse_decl_item(cur, &mut decls);
     }
 
     (decls, parent, at_rules, children)
@@ -391,14 +375,16 @@ pub(crate) fn check_duplicates(decls: &[Decl], context: &str) {
     }
 }
 
+/// Property names are normalized to kebab-case at parse time, so
+/// `font_size` and `font-size` are the same property (and the duplicate
+/// check treats them as one). Leading dashes (`--custom`, `-webkit-*`)
+/// are preserved.
+fn normalize_property(raw: String) -> String {
+    raw.replace('_', "-")
+}
+
 fn parse_property_name(cur: &mut Cursor) -> String {
-    if cur.peek_is_punct('-') && matches!(cur.peek_at(1), Some(TokenTree::Punct(p)) if p.as_char() == '-') {
-        cur.expect_punct('-'); cur.expect_punct('-');
-        let ident = cur.expect_ident();
-        format!("--{ident}")
-    } else {
-        cur.expect_ident().to_string()
-    }
+    normalize_property(cur.parse_dashed_ident())
 }
 
 pub(crate) fn parse_declaration(cur: &mut Cursor) -> Decl {
@@ -408,24 +394,30 @@ pub(crate) fn parse_declaration(cur: &mut Cursor) -> Decl {
     Decl { property, value }
 }
 
-fn parse_raw_css_value(cur: &mut Cursor) -> String {
-    let mut out = String::new();
-    while !cur.peek_is_punct(';') {
-        match cur.bump() {
-            Some(TokenTree::Ident(i)) => { out.push_str(&i.to_string()); out.push(' '); }
-            Some(TokenTree::Literal(l)) => out.push_str(l.to_string().trim_matches('"')),
-            Some(TokenTree::Punct(p)) => out.push(p.as_char()),
-            other => panic!(
-                "chain_ui_style: unexpected token in `css {{}}` block — expected a property value, found {}",
-                describe_token(other.as_ref())
-            ),
-        }
-    }
-    out.trim().to_string()
+/// `css` followed by a `{ }` group — the raw escape block.
+fn is_css_block(cur: &Cursor) -> bool {
+    cur.peek_is_ident("css")
+        && matches!(cur.peek_at(1), Some(TokenTree::Group(g)) if g.delimiter() == Delimiter::Brace)
 }
 
-fn single_literal(s: String) -> ParsedValue {
-    ParsedValue { segments: vec![crate::value::ValueSegment::Literal(s)] }
+/// Parses ONE item in any declaration body: either a `css { ... }` escape
+/// block (adds every declaration inside it, unvalidated) or a normal
+/// declaration. Used by every body — top level, nested, `&`, `selector`,
+/// at-rules, variants and compounds — so `css {}` works everywhere.
+pub(crate) fn parse_decl_item(cur: &mut Cursor, out: &mut Vec<Decl>) {
+    if is_css_block(cur) {
+        cur.bump();
+        let group = cur.expect_group(Delimiter::Brace);
+        let mut inner = Cursor::new(group.stream());
+        while !inner.eof() {
+            let property = parse_property_name(&mut inner);
+            inner.expect_punct(':');
+            let value = value_parser::parse_value_unchecked(&mut inner, &property);
+            out.push(Decl { property, value });
+        }
+    } else {
+        out.push(parse_declaration(cur));
+    }
 }
 
 pub(crate) fn snake_to_pascal(s: &str) -> String {
