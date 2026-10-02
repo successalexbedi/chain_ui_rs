@@ -93,26 +93,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "9330f8b2ff13f34540b44e946ef35111825727b38d33286ef986142615121801"
 
 [[package]]
-name = "chain_ui_alphine"
-version = "0.1.0"
-
-[[package]]
 name = "chain_ui_core"
 version = "0.1.0"
 dependencies = [
+ "axum",
  "chain_ui_macros",
  "owo-colors",
- "textwrap",
-]
-
-[[package]]
-name = "chain_ui_htmx"
-version = "0.1.0"
-dependencies = [
- "axum",
- "chain_ui_core",
  "serde",
  "serde_json",
+ "textwrap",
 ]
 
 [[package]]
@@ -128,8 +117,12 @@ dependencies = [
 name = "chain_ui_style"
 version = "0.1.0"
 dependencies = [
+ "axum",
  "chain_ui_core",
  "chain_ui_style_macros",
+ "serde",
+ "serde_json",
+ "tokio",
 ]
 
 [[package]]
@@ -140,41 +133,6 @@ dependencies = [
  "proc-macro2",
  "quote",
  "syn 2.0.119",
-]
-
-[[package]]
-name = "chain_ui_test"
-version = "0.1.0"
-dependencies = [
- "axum",
- "chain_ui_core",
- "chain_ui_style",
- "chain_ui_unpoly",
- "chainui_rs",
- "serde",
- "serde_json",
- "tokio",
-]
-
-[[package]]
-name = "chain_ui_unpoly"
-version = "0.1.0"
-dependencies = [
- "axum",
- "chain_ui_core",
- "serde",
- "serde_json",
-]
-
-[[package]]
-name = "chainui_rs"
-version = "0.1.0"
-dependencies = [
- "chain_ui_alphine",
- "chain_ui_core",
- "chain_ui_htmx",
- "chain_ui_style",
- "chain_ui_unpoly",
 ]
 
 [[package]]

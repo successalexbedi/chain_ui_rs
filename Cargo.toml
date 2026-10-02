@@ -1,15 +1,5 @@
 [workspace]
-members = [
-    "chain_ui_core",
-    "chain_ui_htmx",
-    "chain_ui_alphine",
-    "chain_ui_unpoly",
-    "chain_ui_macros",
-    "chain_ui_test",
-    "chain_ui_style",
-    "chain_ui_style_macros",
-    "chainui_rs",
-]
+members = ["core", "core/macros", "style", "style/macros"]
 resolver = "3"
 
 [workspace.package]
@@ -29,11 +19,7 @@ axum = "0.7"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 
-chain_ui_core = { path = "chain_ui_core", version = "0.1.0" }
-chain_ui_unpoly = { path = "chain_ui_unpoly", version = "0.1.0" }
-chain_ui_htmx = { path = "chain_ui_htmx", version = "0.1.0" }
-chain_ui_alphine = { path = "chain_ui_alphine", version = "0.1.0" }
-chain_ui_macros = { path = "chain_ui_macros", version = "0.1.0" }
-chain_ui_style = { path = "chain_ui_style", version = "0.1.0" }
-chain_ui_style_macros = { path = "chain_ui_style_macros", version = "0.1.0" }
-chainui_rs = { path = "chainui_rs", version = "0.1.0" }
+chain_ui_core = { path = "core", version = "0.1.0" }
+chain_ui_macros = { path = "core/macros", version = "0.1.0" }
+chain_ui_style = { path = "style", version = "0.1.0" }
+chain_ui_style_macros = { path = "style/macros", version = "0.1.0" }
