@@ -1,10 +1,8 @@
 use proc_macro2::TokenStream;
 use quote::quote;
 
-/// One piece of a value. Adjacent literal text is merged while
-/// parsing; a Dynamic segment is anything evaluated at runtime — a
-/// token-path constant lookup or a `${...}` Rust expression — and
-/// gets spliced in via Display at codegen time.
+/// One piece of a value. Adjacent literal text is merged while parsing; a Dynamic
+/// segment is evaluated at runtime (a token-path constant or a `${...}` expression).
 #[derive(Clone)]
 pub enum ValueSegment {
     Literal(String),

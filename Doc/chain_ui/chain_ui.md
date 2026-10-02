@@ -1,6 +1,8 @@
 # Chain UI + Chain UI Style — Complete Reference
 
-A single, exhaustive document covering `chain_ui_core` (the streaming HTML engine) and `chain_ui_style` (the compile-time CSS engine) — what they are, how to bring them into a project, every syntax form each macro accepts, every public method and tag, how the two crates connect, and the real gotchas found while building Fictreon on top of them.
+A single, exhaustive document covering `chain_ui_core` (the streaming HTML engine) and `chain_ui_style` (the compile-time CSS engine): what they are, how to bring them into a project, every syntax form each macro accepts, every public method and tag, how the two crates connect, how to read their errors, and the real gotchas found while building Fictreon on top of them.
+
+Legend: ✅ built and covered by the lab · 🧪 built, verify with the lab · 🛣️ roadmap.
 
 ---
 
@@ -24,10 +26,10 @@ A single, exhaustive document covering `chain_ui_core` (the streaming HTML engin
 16. [`style!` — Full Syntax Reference](#16-style--full-syntax-reference)
 17. [Selectors & Nesting (Including Arbitrary Depth)](#17-selectors--nesting-including-arbitrary-depth)
 18. [`@media` / `@supports` / `@container`](#18-media--supports--container)
-19. [`contract!` & `tokens!`](#19-contract--tokens)
+19. [`contract!`, `tokens!` & `theme_pack!`](#19-contract-tokens--theme_pack)
 20. [`global!`](#20-global)
 21. [`keyframes!`](#21-keyframes)
-22. [`theme!`](#22-theme)
+22. [`theme!` (Layers, Vars, Packs, Report)](#22-theme-layers-vars-packs-report)
 23. [`sprinkles!`](#23-sprinkles)
 24. [Known-Value Validation](#24-known-value-validation)
 25. [The `ClassMarker` Bridge](#25-the-classmarker-bridge)
@@ -36,6 +38,11 @@ A single, exhaustive document covering `chain_ui_core` (the streaming HTML engin
 28. [Recommended Folder Layout](#28-recommended-folder-layout)
 29. [Gotchas & Troubleshooting Checklist](#29-gotchas--troubleshooting-checklist)
 30. [Full API Appendix](#30-full-api-appendix)
+31. [Diagnostics: Reading and Fixing Errors](#31-diagnostics-reading-and-fixing-errors)
+32. [Editor Autocomplete](#32-editor-autocomplete)
+33. [The Lab: Testing the Engine](#33-the-lab-testing-the-engine)
+34. [Cookbook](#34-cookbook)
+35. [Roadmap](#35-roadmap)
 
 ---
 
@@ -43,19 +50,17 @@ A single, exhaustive document covering `chain_ui_core` (the streaming HTML engin
 
 **`chain_ui_core`** is a streaming HTML engine written in Rust. Instead of building a DOM-like tree in memory and serializing it afterward, every method call writes directly into a growable buffer. There is no intermediate tree, no second serialization pass, and — for the common case — no heap allocation at all (`StreamBuf` stays on the stack until it exceeds 64 bytes). Performance has been validated at 13,550+ pages/sec in real benchmarks.
 
-**`chain_ui_style`** is a compile-time CSS engine: Sass-level power (composition, nesting, a token system, conditionals resolved at build time) made native to `cargo build`, with zero runtime footprint and zero external toolchain. Nothing in this crate generates or mutates CSS client-side, ever. The differentiator versus Sass isn't "does something Sass can't" — it's that everything stays inside Rust's own compile step: type-checked token access, real Rust values reaching your CSS through `${...}` interpolation with no serialization boundary, one `cargo build` instead of two toolchains.
+**`chain_ui_style`** is a compile-time CSS engine: Sass-level power (composition, nesting, a token system, build-time values) made native to `cargo build`, with zero runtime footprint and zero external toolchain. Nothing in this crate generates or mutates CSS client-side, ever. It reads like CSS (`font-size: 16px;`, `--my-var: 1;`, `-webkit-x: y;`), and everything stays inside Rust's own compile step: type-checked token access, real Rust values reaching your CSS through `${...}` interpolation, readable compile errors that point at the exact token, one `cargo build` instead of two toolchains.
 
 They are two separate crates with a strict one-way dependency: `chain_ui_style` depends on `chain_ui_core`, never the reverse. `chain_ui_core` has no idea styling exists; it exposes exactly one trait (`ClassMarker`, §25) for styling crates to hook into.
 
-Use these when you're rendering server-side HTML at high volume, want compile-time typo protection on tag names and CSS values without inventing a template language, and want plain Rust control flow (`if`, `for`, `match`) to *be* your templating logic instead of a separate DSL.
+Use these when you're rendering server-side HTML at high volume, want compile-time typo protection on tag names and CSS without inventing a template language, and want plain Rust control flow (`if`, `for`, `match`) to *be* your templating logic instead of a separate DSL.
 
 ---
 
 ## 2. Installing / Importing Into a Project
 
 ### As individual crates (workspace-local)
-
-If you're working inside the `chain_ui_rs` workspace itself, add path dependencies:
 
 ```toml
 [dependencies]
@@ -65,7 +70,7 @@ chain_ui_style = { path = "../chain_ui_style" }
 
 ### As a published dependency
 
-Once published to crates.io, a consuming project depends on the facade crate `chainui_rs`, which re-exports both:
+Once published, a consuming project depends on the facade crate `chainui_rs`, which re-exports both:
 
 ```toml
 [dependencies]
@@ -75,23 +80,23 @@ tokio = { version = "1", features = ["full"] }
 ```
 
 ```rust
-use chainui_rs::prelude::*;   // brings in Element, tag::, style!, theme!, etc. all at once
+use chainui_rs::prelude::*;   // Element, tag::, chain_fmt!, raw_html, style macros…
 ```
 
-`chainui_rs::core` and `chainui_rs::style` are also available as explicit module paths for anything not in the prelude (e.g. `chainui_rs::style::render::minify`).
+`chainui_rs::core` and `chainui_rs::style` are also available as explicit module paths for anything not in the prelude (e.g. `chainui_rs::style::render::minify`, `chainui_rs::style::theme_pack!`).
 
 ### Publishing your own multi-crate workspace as one thing
 
-crates.io has no concept of "workspace" — every crate publishes individually, always. To give *users* a single dependency line anyway:
+crates.io has no concept of "workspace" — every crate publishes individually. To give *users* a single dependency line anyway:
 
-1. Every crate needs `description` and `license` set (inherit from `[workspace.package]` to avoid repeating them).
-2. Every internal dependency needs both `path` *and* `version` — `path` is stripped at publish time, only `version` survives:
+1. Every crate needs `description` and `license` set (inherit from `[workspace.package]`).
+2. Every internal dependency needs both `path` *and* `version` — `path` is stripped at publish time:
    ```toml
    chain_ui_core = { path = "../chain_ui_core", version = "0.1.0" }
    ```
-3. Login once: `cargo login`, paste your crates.io API token.
-4. Dry-run every crate: `cargo publish --dry-run` inside each crate directory, fix whatever it flags.
-5. Publish in dependency order, bottom of the graph first, waiting ~30–60s between each so the index catches up:
+3. Login once: `cargo login`, paste your crates.io token.
+4. Dry-run every crate: `cargo publish --dry-run`.
+5. Publish in dependency order, waiting 30–60s between each:
    ```bash
    cd chain_ui_macros && cargo publish
    cd ../chain_ui_style_macros && cargo publish
@@ -99,86 +104,81 @@ crates.io has no concept of "workspace" — every crate publishes individually, 
    cd ../chain_ui_style && cargo publish
    cd ../chainui_rs && cargo publish
    ```
-6. Versions are **immutable** — you can never overwrite a published version, even to fix a typo. Bump the version number and re-publish for any change.
+6. Versions are **immutable**. Bump and re-publish for any change.
 
 ---
 
 ## 3. Quick Start
 
-The smallest complete example, core only:
+Core only:
 
 ```rust
 use chain_ui_core::prelude::*;
 
 fn main() {
-    let page = tag::div()
-        .class("greeting")
-        .child("hi")
-        .build();
-
+    let page = tag::div().class("greeting").child("hi").build();
     println!("{page}"); // <div class="greeting">hi</div>
 }
 ```
 
-Core + style together:
+Core + style, written the way CSS reads:
 
 ```rust
-use chain_ui_core::prelude::*;
-use chain_ui_style::prelude::*;
+use chainui_rs::prelude::*;
 
-chain_ui_style::style!(book_card {
+chainui_rs::style::style!(book_card {
     display: flex;
+    gap: 12px;
     padding: 16px;
-    border_radius: 12px;
+    border-radius: 12px;
+    background: "#14151a";            // hex colors are quoted (see §16)
+    transition: transform 0.3s ease;
 
-    &:hover {
-        transform: "translateY(-4px)";
-    }
+    &:hover { transform: translate-y(-4px); }
+    @media "(max-width: 600px)" { padding: 8px }   // last `;` may be omitted
 });
+
+chainui_rs::style::theme!("app" { book_card; });   // the table of contents
 
 fn card() -> Element {
     tag::div().style::<BookCard>().child("a book")
 }
+
+fn page() -> Element {
+    tag::html()
+        .child(tag::head().child(app_theme()))     // <style> with the whole theme
+        .child(tag::body().child(card()))
+}
 ```
 
-`style!(book_card { ... })` generates a zero-sized marker struct `BookCard` (snake_case macro name → PascalCase Rust type) that `.style::<BookCard>()` accepts — no separate import needed for that method; it comes from `chain_ui_core::prelude::*` alone (§25).
+`style!(book_card { … })` generates a zero-sized marker struct `BookCard` (snake_case → PascalCase) that `.style::<BookCard>()` accepts. `theme!("app" { … })` generates `app_css()`, `app_theme()`, `app_css_version()` and `app_report()`.
 
 ---
 
 ## 4. Core Concept: Streaming, Not Tree-Building
 
-Every `Element`/`VoidElement` writes into a `StreamBuf` — 64 bytes inline, spilling to the heap only past that. There is no structured tree you can walk, diff, or mutate after the fact; once a byte lands in the buffer, it's not coming back out as structured data. This is a deliberate trade: real time-to-render throughput in exchange for giving up the ability to inspect/mutate a built tree (e.g. for virtual-DOM-style diffing).
+Every `Element`/`VoidElement` writes into a `StreamBuf` — 64 bytes inline, spilling to the heap only past that. There is no structured tree you can walk, diff, or mutate after the fact; once a byte lands in the buffer, it's not coming back out as structured data. This is a deliberate trade: real time-to-render throughput in exchange for giving up the ability to inspect/mutate a built tree.
 
-Concretely: `Element::new("div")` immediately writes `<div` into its buffer. `.class("x")` writes ` class="x"` and closes the quote. `.child(...)` closes the opening tag's `>` and appends whatever you passed. `.build()` writes the closing tag and hands you the finished string. Nothing is buffered as an abstract syntax tree at any point — it's bytes, appended in call order.
+Concretely: `Element::new("div")` immediately writes `<div` into its buffer. `.class("x")` writes ` class="x"` and closes the quote. `.child(...)` closes the opening tag's `>` and appends whatever you passed. `.build()` writes the closing tag and hands you the finished string.
 
 ---
 
 ## 5. Elements & Tags
 
-Two concrete types back every tag: `Element` (can hold children) and `VoidElement` (self-closing, never holds children — `<img>`, `<input>`, `<br>`, etc.). Both are **plain structs, never generic typestate** — a function can return `Element` regardless of how many attributes or children it ends up with internally. This is what makes `Vec<Element>`, passing elements across function boundaries, and conditional construction all just work without generic parameter explosion.
+Two concrete types back every tag: `Element` (can hold children) and `VoidElement` (self-closing — `<img>`, `<input>`, `<br>`). Both are **plain structs, never generic typestate** — a function can return `Element` regardless of how many attributes or children it ends up with. That's what makes `Vec<Element>`, passing elements across function boundaries, and conditional construction just work.
 
 ```rust
 tag::div()                 // -> Element
 tag::img()                 // -> VoidElement
-Element::new("div")        // same as tag::div(), for a runtime-computed tag name
-VoidElement::new("img")    // same as tag::img()
+Element::new("div")        // runtime-computed tag name
+VoidElement::new("img")
 ```
 
-**`tag::`** covers every legal HTML container and void tag. **`svg::`** is a *separate* namespace for tags that only make sense inside an `<svg>` root. Call them the same way:
+**`tag::`** covers every legal HTML container and void tag. **`svg::`** is a separate namespace for tags that only make sense inside an `<svg>` root: `tag::div()`, `svg::path()`, `svg::circle()`. `use` is a reserved word, so `<use>` is `svg::r#use()`.
 
-```rust
-tag::div()       svg::path()       svg::circle()
-```
+Custom elements work through `Element::new`/`VoidElement::new` as long as the tag name contains a hyphen (an HTML rule): `Element::new("my-widget")`.
 
-`use` is a reserved Rust keyword, so the SVG `<use>` element is `svg::r#use()`.
-
-Custom elements (web components) work through `Element::new`/`VoidElement::new` as long as the tag name contains a hyphen — an HTML spec requirement, not a Chain UI rule:
-
-```rust
-Element::new("my-widget")
-```
-
-**Debug-build typo protection.** Any other unrecognized tag name panics with a Levenshtein-matched suggestion — e.g. `Element::new("dvi")` panics suggesting `div`; `Element::new("btn")` suggests `button`. This check is compiled out entirely in release builds (`#[cfg(debug_assertions)]`), so it costs nothing in production. Passing a container tag name to `VoidElement::new`, or a void tag name to `Element::new`, produces a panic naming which constructor you actually wanted:
+**Debug-build typo protection.** An unrecognized tag name panics with a Levenshtein-matched suggestion (`Element::new("dvi")` suggests `div`). Compiled out entirely in release builds. Passing a container tag to `VoidElement::new`, or a void tag to `Element::new`, names the constructor you wanted:
 
 ```
 error: VoidElement::new
@@ -186,7 +186,7 @@ error: VoidElement::new
   Use Element::new("div") or tag::div() instead.
 ```
 
-### Full container tag list (`tag::`, returns `Element`)
+### Container tags (`tag::`, returns `Element`)
 
 ```
 div, section, nav, main, header, footer, aside, article, address,
@@ -199,48 +199,33 @@ audio, iframe, canvas, picture, map, object, html, head, body,
 title, style, script, noscript, svg, datalist
 ```
 
-### Full void tag list (`tag::`, returns `VoidElement`)
+### Void tags (`tag::`, returns `VoidElement`)
 
 ```
 br, hr, img, input, link, meta, area, base, col, embed, param,
 source, track, wbr
 ```
 
-### SVG container tags (`svg::`, returns `Element`)
+### SVG tags (`svg::`)
 
-```
-g, defs, symbol, clipPath, mask, linearGradient, radialGradient,
-text, tspan, marker, foreignObject
-```
-
-### SVG void tags (`svg::`, returns `VoidElement`)
-
-```
-path, circle, rect, line, ellipse, polygon, polyline, stop, image
-```
-Plus `svg::r#use()`.
+Containers (`Element`): `g, defs, symbol, clipPath, mask, linearGradient, radialGradient, text, tspan, marker, foreignObject`.
+Void (`VoidElement`): `path, circle, rect, line, ellipse, polygon, polyline, stop, image`, plus `svg::r#use()`.
 
 ### Prebuilt SVG icon geometry helpers
 
-For pure geometric shapes with no meaningful custom path data — reduces repetition for the simplest icons:
-
 ```rust
-svg::circle_icon(r: u32) -> Element     // <circle cx="12" cy="12" r="{r}">
-svg::check_path() -> Element            // <path d="M5 12l5 5L19 7"> — a checkmark
+svg::circle_icon(r: u32) -> Element          // <circle cx="12" cy="12" r="{r}">
+svg::check_path() -> Element                 // <path d="M5 12l5 5L19 7">
 svg::rounded_square(radius: u32) -> Element  // <rect x="2" y="2" width="20" height="20" rx="{radius}">
 ```
 
-For anything else — a real icon glyph — hand-write the path:
+For real glyphs, hand-write the path:
 
 ```rust
 fn menu_icon() -> Element {
     tag::svg()
-        .attr("viewBox", "0 0 24 24")
-        .attr("fill", "none")
-        .attr("stroke", "currentColor")
-        .attr("stroke-width", "1.8")
-        .attr("stroke-linecap", "round")
-        .attr("stroke-linejoin", "round")
+        .attr("viewBox", "0 0 24 24").attr("fill", "none").attr("stroke", "currentColor")
+        .attr("stroke-width", "1.8").attr("stroke-linecap", "round").attr("stroke-linejoin", "round")
         .child(svg::path().attr("d", "M3 12h18M3 6h18M3 18h18"))
 }
 ```
@@ -249,7 +234,7 @@ fn menu_icon() -> Element {
 
 ## 6. Attributes
 
-Every attribute method (`.class`, `.attr`, `.flag`, `.style`, `.css_var`, and their `_if` variants) enforces one rule: **all attribute calls must happen before the first `.child()` call.** Once a child is added, the opening tag is already written into the buffer and physically can't be edited — that's the tradeoff of streaming into a buffer instead of building an editable tree. Getting the order wrong fails loudly, at the exact call site, via `#[track_caller]`:
+Every attribute method enforces one rule: **all attribute calls must happen before the first `.child()` call.** Once a child is added, the opening tag is already written into the buffer and can't be edited. Getting the order wrong fails loudly at the exact call site, via `#[track_caller]`:
 
 ```
 error: <div>
@@ -258,26 +243,24 @@ error: <div>
   at src/main.rs:12
 ```
 
-### Full attribute method table
-
 | Method | Signature | Behavior |
 |---|---|---|
-| `.class(name)` | `impl Into<ChainStr>` | Merges into an existing `class="..."` if called again — pops the closing quote, appends a space and the new class, re-closes it. Zero-allocation for the common multi-class case. |
-| `.class_if(cond, name)` | | Applies `.class()` only if `cond` is true |
+| `.class(name)` | `impl Into<ChainStr>` | Merges into an existing `class="…"` if called again. Zero-allocation for the common multi-class case. |
+| `.class_if(cond, name)` | | `.class()` only if `cond` |
 | `.classes_if(iter)` | `IntoIterator<Item = (bool, S)>` | Batch conditional classes |
-| `.attr(key, value)` | `impl Into<ChainStr>, impl Into<ChainStr>` | Raw attribute. **Does not merge** — calling `.attr("data-x", "1").attr("data-x", "2")` writes two `data-x` attributes; the HTML parser keeps only the first and silently drops the rest. This is intentional (not every attribute has a sensible merge rule) — only `.class()` and `.style_attr()` merge. |
+| `.attr(key, value)` | `impl Into<ChainStr>` ×2 | Raw attribute. **Does not merge** — a repeated key writes a duplicate the HTML parser silently drops. Only `.class()` and `.style_attr()` merge. |
 | `.attr_if(cond, key, value)` | | Conditional `.attr()` |
 | `.id(id)` | | `.attr("id", id)` |
-| `.src(url)` `.href(url)` `.alt(text)` `.name(n)` `.value(v)` `.placeholder(p)` `.type_(t)` | | Shorthand wrappers over `.attr()` for common attributes |
-| `.flag(cond, key)` | | Boolean HTML attribute — present by name with no value if `cond` is true, absent entirely if false (e.g. `<input disabled>`, never `disabled="true"`) |
-| `.disabled(cond)` `.required(cond)` `.readonly(cond)` `.checked(cond)` | | Shorthand `.flag()` wrappers |
-| `.style_attr(css)` | `impl Into<ChainStr>` | Raw `style="..."` attribute. **Merges across repeated calls**, same mechanism as `.class()` — pops the closing quote and appends, rather than writing a second `style=` attribute. |
-| `.style::<M: ClassMarker>()` | | `.class(M::NAME)` — applies a `style!` block's generated class. See §25/§26. |
-| `.css_var(name, value)` | `&str, impl Display` | Writes `--{kebab-name}: {value};` into the (merging) style attribute |
-| `.css_vars(&[(name, &dyn Display)])` | | Sets several custom properties in one call, one merged style attribute |
-| `.modify(f)` | `FnOnce(Self) -> Self` | Escape hatch — run arbitrary logic mid-chain (e.g. pull repeated conditional logic into a named function) without breaking the chain |
+| `.src` `.href` `.alt` `.name` `.value` `.placeholder` `.type_` | | Shorthands over `.attr()` |
+| `.flag(cond, key)` | | Boolean attribute: present with no value, or absent |
+| `.disabled` `.required` `.readonly` `.checked` | | `.flag()` shorthands |
+| `.style_attr(css)` | `impl Into<ChainStr>` | Raw `style="…"`. **Merges** across repeated calls. |
+| `.style::<M: ClassMarker>()` | | `.class(M::NAME)` — applies a `style!` block's class (§25/§26) |
+| `.css_var(name, value)` | `&str, impl Display` | Writes `--{kebab-name}: {value};` into the merging style attribute |
+| `.css_vars(&[(name, &dyn Display)])` | | Several custom properties in one call, one merged attribute |
+| `.modify(f)` | `FnOnce(Self) -> Self` | Escape hatch: run logic mid-chain without breaking the chain |
 
-All of these are implemented once via the `impl_attr_methods!` macro and applied to both `Element` and `VoidElement` — every method above works identically on a void tag like `img` (minus `.child()`, which void elements don't have).
+All of these are implemented once via `impl_attr_methods!` and apply to both `Element` and `VoidElement`.
 
 ---
 
@@ -287,18 +270,16 @@ All of these are implemented once via the `impl_attr_methods!` macro and applied
 
 | Type | Behavior |
 |---|---|
-| `&str` / `String` / `&String` / `ChainStr` | HTML-escaped text (`&`→`&amp;`, `<`→`&lt;`, `>`→`&gt;`) |
-| `Element` / `VoidElement` | Nested and flattened into the parent's buffer |
-| `Option<T: IntoStream>` | `Some` renders its content, `None` renders nothing — **this is your `if`** |
-| `Vec<T: IntoStream>` | Each item renders in order |
-| Tuples `(A, B, ...)` up to 6 elements | Each renders in order — pass multiple children in one call |
-| `()` | Renders nothing |
-| A closure `\|\| { ... }` returning `impl IntoStream` | **This is your `for`/`match`/imperative escape hatch.** |
-| `raw_html(s)` (`RawHtml`) | **Unescaped.** The only way to inject pre-built markup or CSS without entity-escaping. See §27. |
+| `&str` / `String` / `&String` / `ChainStr` | HTML-escaped text |
+| `Element` / `VoidElement` | Nested into the parent's buffer |
+| `Option<T: IntoStream>` | `Some` renders, `None` renders nothing — **your `if`** |
+| `Vec<T: IntoStream>` | Each item in order — **your `for`** (`iter().map(…).collect::<Vec<_>>()`) |
+| Tuples `(A, B, …)` up to 6 | Each in order |
+| `()` | Nothing |
+| A closure `\|\| { … }` | Elements built inside attach themselves on drop |
+| `raw_html(s)` | **Unescaped.** The only way to inject trusted markup or CSS (§27) |
 
-### The closure pattern for loops
-
-Build elements inside a closure passed to `.child()` with a bare expression statement — no `;`-swallowing trick needed, and **no `.render()`, `.push()`, or similar method exists.** Each element you build inside the closure gets automatically captured into the closure's active scope via a `Drop` implementation the moment it goes out of scope with nothing else claiming it:
+### The closure pattern
 
 ```rust
 tag::ul().child(|| {
@@ -308,9 +289,9 @@ tag::ul().child(|| {
 })
 ```
 
-Calling `.render()` here is a compile error (the method doesn't exist) — a common mistake when coming from other templating libraries that use an explicit push/render call.
+There is **no `.render()` or `.push()` method**. Each element built inside the closure is captured by its `Drop` impl.
 
-### `if`/`match` via `Option` and plain expressions
+### `if` / `match`
 
 ```rust
 tag::div().child(if featured { Some(tag::span().child("★")) } else { None })
@@ -321,27 +302,27 @@ tag::div().child(match status {
 })
 ```
 
-No dedicated `.child_if()`/`.child_for()`/`.child_maybe()` methods exist — they were deliberately rejected in favor of plain Rust reaching the same result through `Option`, tuples, and the closure form.
+No `.child_if()` / `.child_for()` exist by design: plain Rust does the same.
 
 ---
 
 ## 8. Strings & Formatting
 
-`ChainStr` is the string type every attribute/text method accepts (`impl Into<ChainStr>`), backed by three representations chosen automatically:
+`ChainStr` is the string type every attribute/text method accepts:
 
 | Variant | When |
 |---|---|
 | `ChainStr::Static(&'static str)` | String literals — zero cost |
-| `ChainStr::Owned(Arc<str>)` | Owned, heap-allocated dynamic text |
-| `ChainStr::Inline { buf: [u8; 48], len }` | Short formatted strings built by `chain_fmt!` — no heap allocation |
+| `ChainStr::Owned(Arc<str>)` | Owned dynamic text |
+| `ChainStr::Inline { buf: [u8; 48], len }` | Short results of `chain_fmt!` — no heap allocation |
 
-`chain_fmt!` is a drop-in replacement for `format!` that formats into a 48-byte stack buffer, falling back to a real `String` only if the result overflows that:
+`chain_fmt!` is a drop-in `format!` that uses a 48-byte stack buffer and falls back to a `String` on overflow:
 
 ```rust
 tag::span().child(chain_fmt!("{} of {}", current, total))
 ```
 
-Prefer `chain_fmt!` over `format!` for short, frequently-generated strings (loop bodies, per-item labels) — it's the enforced convention across the codebase, not merely a suggestion.
+Prefer it over `format!` for short, frequently generated strings. It's the house convention.
 
 ---
 
@@ -349,10 +330,10 @@ Prefer `chain_fmt!` over `format!` for short, frequently-generated strings (loop
 
 | Method | Returns | Use |
 |---|---|---|
-| `.build()` | `ChainMarkup` | Finalizes (writes the closing tag), returns a `Display`-able wrapper. Call `.into_string()` for a plain `String`. |
-| `.render_to(writer)` | `io::Result<()>` | Streams directly to any `impl io::Write` — skips an intermediate `String` |
+| `.build()` | `ChainMarkup` | Writes the closing tag; `Display`-able. `.into_string()` for a `String`. |
+| `.render_to(writer)` | `io::Result<()>` | Streams into any `impl io::Write` |
 
-If an `Element`/`VoidElement` is dropped without ever being attached — no `.child()` from a parent, no `.build()`, no `.render_to()`, and not inside an active closure scope — it **panics in debug builds**:
+An element dropped without ever being attached (no `.child()` from a parent, no `.build()`, no `.render_to()`, not inside a closure scope) **panics in debug builds**:
 
 ```
 This element was built but never attached anywhere — no .child(), .build(), or
@@ -361,111 +342,122 @@ would be silently thrown away. This is almost always a stray semicolon
 (tag::div(); instead of tag::div()) or a forgotten return.
 ```
 
-This is a specific, deliberate guard against the class of bug where you build something and forget to hook it up. Release builds skip the check; the orphaned content is just dropped, silently, as it would be with any unused value.
-
 ---
 
 ## 10. Streaming Internals
 
-`StreamBuf`: 64 bytes inline, spills to a heap `String` only past that. Kept deliberately small so collecting thousands of elements into a `Vec` doesn't blow out cache lines with oversized per-element structs. Every `push_str` call takes a complete, already-valid `&str` — never a partial byte slice — which is what keeps the inline buffer guaranteed-valid UTF-8 at every point.
-
-Two escape functions, applied automatically wherever text/attribute values pass through the public API:
+`StreamBuf`: 64 bytes inline, spills to a heap `String` past that. Every `push_str` takes a complete, valid `&str`, which keeps the inline buffer valid UTF-8 at every point.
 
 | Function | Escapes | Used by |
 |---|---|---|
 | `escape_text` | `&` `<` `>` | `.child(&str)` / `.child(String)` |
-| `escape_attr` | `&` `<` `>` `"` | `.attr()` / `.class()` / `.style_attr()` values |
+| `escape_attr` | `&` `<` `>` `"` | `.attr()` / `.class()` / `.style_attr()` |
 
-Neither is user-callable directly (both are `pub(crate)`) — you opt out entirely via `raw_html()` instead, never by calling a partial-escape variant. This is deliberate: there is no half-safe escape hatch, only "fully escaped" (the default) or "fully trusted, your responsibility" (`raw_html()`).
+Neither is public. You opt out only through `raw_html()`: there is no half-safe escape.
 
 ---
 
 ## 11. Caching
 
-`chain_ui_core::cache` provides a bounded (2048-entry), **thread-local** LRU cache for pre-rendered HTML fragments, backed by an array-based doubly-linked list for true O(1) inserts, lookups, and evictions — no double-hashing. Keys are hashed with a custom `FxHasher` (not the default `SipHash`) for speed.
+`chain_ui_core::cache` is a bounded (2048-entry), **thread-local** LRU for pre-rendered fragments, with O(1) operations and an `FxHasher`.
 
 | Function | Signature | Behavior |
 |---|---|---|
-| `component(key, generator)` | `K: Hash, G: FnOnce() -> Vec<u8>` → `Arc<[u8]>` | Cache-or-generate. Runs `generator` only on a miss. |
-| `set(key, bytes)` | `K: Hash` → `Arc<[u8]>` | Unconditional write — always runs, overwrites any existing entry. For stale-while-revalidate patterns needing a forced refresh after serving an old value. |
-| `try_get(key)` | `K: Hash` → `Option<Arc<[u8]>>` | Lookup without generating on a miss — returns `None` instantly instead of blocking on a fresh render |
-| `clear_local_cache()` | | Empties the cache for the current thread |
-| `cache_len()` | → `usize` | Current entry count |
+| `component(key, generator)` | `K: Hash, G: FnOnce() -> Vec<u8>` → `Arc<[u8]>` | Cache-or-generate |
+| `set(key, bytes)` | `K: Hash` → `Arc<[u8]>` | Unconditional write |
+| `try_get(key)` | `K: Hash` → `Option<Arc<[u8]>>` | Lookup without generating |
+| `clear_local_cache()` | | Empties this thread's cache |
+| `cache_len()` | → `usize` | Entry count |
 
-Not global — each thread gets its own independent 2048-entry cache.
+Not global — each thread has its own cache.
 
 ---
 
 ## 12. Context / Scoped State
 
-`#[context(...)]`, from `chain_ui_macros` (re-exported at the core crate root), generates request-scoped global state without manual prop-drilling.
+`#[context(...)]` (from `chain_ui_macros`, re-exported by core) generates request-scoped state without prop-drilling.
 
 ```rust
 #[context(current_user, User)]
-struct UserContext;
+struct UserContext;      // generates a tokio task-local and `with_current_user(value, async { … }).await`
 ```
-generates a `tokio::task_local!` slot and a setter `with_current_user(value, async { ... }).await`.
 
 ```rust
 #[context(current_user(id, name))]
-fn greet() -> String {
-    format!("hi {name}, id {id}")
-}
+fn greet() -> String { format!("hi {name}, id {id}") }   // pulls fields out as locals (must be Clone)
 ```
-pulls `id` and `name` out of the active `current_user` context as local variables inside the function body. The pulled fields must be `Clone`. Calling a `#[context(...)]`-annotated function outside an active `with_X(...).await` scope panics via `context::context_missing`, naming the missing context type and the setter you need to wrap it in.
+
+Calling it outside a `with_X(...)` scope panics naming the missing context and the setter.
 
 ---
 
 ## 13. Native Browser Helpers
 
-Small zero-JS convenience builders for modern HTML platform features:
-
 | Function | Emits |
 |---|---|
-| `popover_trigger(target_id, label)` | `<button popovertarget="...">label</button>` |
-| `popover_panel(id, content)` | `<div id="..." popover="auto">content</div>` |
-| `auto_closing_dialog(id, content)` | `<dialog id="..." closedby="any">content</dialog>` |
+| `popover_trigger(target_id, label)` | `<button popovertarget="…">label</button>` |
+| `popover_panel(id, content)` | `<div id="…" popover="auto">content</div>` |
+| `auto_closing_dialog(id, content)` | `<dialog id="…" closedby="any">content</dialog>` |
 | `dialog_cancel_button(label)` | `<button formmethod="dialog" value="cancel">label</button>` |
-| `autocomplete_input(name, list_id)` | `<input name="..." list="...">` |
-| `lazy_img(src, alt)` | `<img src="..." alt="..." loading="lazy">` |
-| `progress_bar(value, max)` | `<progress value="..." max="...">` |
-| `time_tag(display_text, machine_date)` | `<time datetime="...">display_text</time>` |
-| `download_link(url, filename, label)` | `<a href="..." download="...">label</a>` |
-| `external_link(url, label)` | `<a href="..." target="_blank" rel="noopener noreferrer">label</a>` |
+| `autocomplete_input(name, list_id)` | `<input name="…" list="…">` |
+| `lazy_img(src, alt)` | `<img src="…" alt="…" loading="lazy">` |
+| `progress_bar(value, max)` | `<progress value="…" max="…">` |
+| `time_tag(display_text, machine_date)` | `<time datetime="…">display_text</time>` |
+| `download_link(url, filename, label)` | `<a href="…" download="…">label</a>` |
+| `external_link(url, label)` | `<a href="…" target="_blank" rel="noopener noreferrer">label</a>` |
 
-All return a plain `Element`/`VoidElement`, chainable with any other attribute/child method.
+All return a plain `Element`/`VoidElement`.
 
 ---
 
 ## 14. Error Messages & Guardrails
 
-Every panic routes through `chain_panic!`, which calls a single non-inlined `render_panic` function. In a terminal, it prints a colored, word-wrapped error with the offending target bolded; outside a terminal it falls back to a plain `[CHAIN UI ERROR] in {target}: {msg}` line.
+There are two families of errors, and they behave differently.
 
-Guardrails using this mechanism:
-- **Attribute-after-child ordering** (§6) — `#[track_caller]` gives exact file/line.
-- **Unrecognized tag names** (§5) — debug-only, Levenshtein-matched.
-- **Orphaned/un-attached elements** (§9) — debug-only.
-- **Missing context** (§12) — names the required context type and setter directly.
+**Runtime guardrails (chain_ui_core).** Every panic routes through `chain_panic!`, which prints a colored, word-wrapped message in a terminal and a plain `[CHAIN UI ERROR] in {target}: {msg}` otherwise:
+- attribute after child (exact call site, via `#[track_caller]`)
+- unknown tag name (debug builds, Levenshtein-matched)
+- orphaned element (debug builds)
+- missing context (names the type and setter)
 
-**Friendly token descriptions.** Internal parser panics (both core and style) describe unexpected tokens in plain English rather than dumping Rust's `Debug` format:
+**Compile-time diagnostics (chain_ui_style).** Every style/theme/token error is a `compile_error!` anchored on the exact token you wrote, with a title, `note`, `help` and often an `example`. One build reports every error, not just the first. Details and a catalog of messages are in §31.
+
 ```
-chain_ui_style: expected `important` after `!`, found `imprtant`
-chain_ui_style: expected a `{...}` block, found end of input
+error: chain_ui_style: `flx` is not a valid value for `display`
+  = help: did you mean `flex`?
+  = note: valid keywords: flex, inline-flex, block, inline, …
+  = example:
+      display: flex;
 ```
-instead of `expected identifier, got Some(Punct { char: '.', spacing: Alone, span: #0 ... })`.
+
+**Startup errors.** Things that can only be known when the theme is resolved (a `compose:` cycle, a `compose:` of an unknown name) panic the first time `<theme>_css()` runs. Call it in `main()` so they surface at startup.
 
 ---
 
 ## 15. chain_ui_style: Introduction
 
-The pipeline, always kept as four separate layers: Rust source (`style!`/`tokens!`/`theme!`/`contract!`) → `Style` AST → dependency graph (resolves `compose:`, dedupes shared dependencies, detects cycles) → CSS renderer → `Element` (a `<style>` tag, via `chain_ui_core`).
+The pipeline, kept as separate layers:
 
-Non-negotiable architectural rules:
-- No async and no DB/HTTP knowledge inside `style!` ever — data must arrive pre-resolved via `${...}`.
+```
+Rust source ──► parse (spans, recovery, completion hints) ──► Style AST
+style!/tokens!/global!/keyframes!/theme_pack!                    │
+                                                                 ▼
+                       theme!(layers, vars, packs) ──► resolve (compose graph, cycles)
+                                                                 │
+                                                                 ▼
+                              render (layers, keyframe-name normalization, source comments)
+                                                                 │
+                                                                 ▼
+                        <name>_css()  ·  <name>_theme()  ·  <name>_report()  ·  <name>_css_version()
+```
+
+Non-negotiable rules:
+- No async and no DB/HTTP knowledge inside `style!` — data arrives pre-resolved via `${…}`.
 - No per-instance classes — dynamic data always goes through CSS custom properties (`.css_var()`).
 - AST-first, CSS-string-last — the renderer is the only string-producing layer.
 - Deterministic ordering — fixed pipeline order, never hash-map iteration order.
-- Zero-runtime is hard law — nothing generates or mutates CSS client-side, ever, including `sprinkles!`.
+- Zero runtime — nothing generates or mutates CSS client-side, ever.
+- Open-world — an unknown property or keyword is allowed unless it looks like a typo of a known one.
 
 ---
 
@@ -477,140 +469,172 @@ style!(marker_name {
     property: value;
 });
 ```
-or the string form: `style!("marker_name" { ... })` — both accepted, identifier form is primary.
 
-- **`compose:`** — comma-separated list of other `style!` markers to merge in first. Later-composed styles, and the local block itself, override earlier same-property declarations (last-write-wins, first-seen property order preserved). Circular `compose:` is caught at process startup (see §22), not at first request.
-- **Duplicate property in one block** is a macro-expansion-time error — checked across plain declarations, nested blocks, parent-selector blocks, and `@media` blocks. Put an override in a *composing* style, never twice in the same block.
-- Generated marker naming: snake_case macro invocation name → PascalCase Rust type (`book_card` → `BookCard`). This is what `.style::<Marker>()` and `theme! { ... }` both key off.
+or the string form `style!("marker_name" { … })`. The name becomes a Rust type name and a CSS class, so it must be letters, digits and underscores.
 
-### Value syntax — the complete table
+- **`compose:`** — comma-separated style names merged in first. Later styles, and the block itself, override earlier same-property declarations (last write wins, first-seen order kept). A cycle or an unknown name panics at startup (§14), with a did-you-mean.
+- **Duplicate property in one block** is a compile error. `font-size` and `font_size` count as the same property.
+- **Marker naming:** `book_card` → `BookCard`.
+- **The last declaration in a block may omit its `;`**, like CSS. Every other one needs it, and a missing one is reported where it happens (§31).
+
+### Property names
+
+| You write | Rendered | Notes |
+|---|---|---|
+| `font-size` | `font-size` | CSS spelling |
+| `font_size` | `font-size` | Rust spelling; identical property |
+| `--accent` / `--my_var` | `--accent` / `--my-var` | Custom properties, always kebab-case |
+| `-webkit-line-clamp` | `-webkit-line-clamp` | Vendor prefixes work anywhere |
+
+A name that looks like a typo of a known property (`disply`, `colour`) is an error with a suggestion. A name that is simply unknown passes (open-world). To use a property the list doesn't know and *also* a name close to a known one, put it in `css { … }` (§17), which is never checked.
+
+### Value syntax
 
 | Form | Example | Notes |
 |---|---|---|
-| Bare unit literal | `padding: 16px;` `width: 1.5rem;` `height: 100vh;` | Works for free — Rust's lexer treats `16px` etc. as one literal token |
-| Bare keyword | `display: flex;` `cursor: pointer;` | Validated at macro-expansion time against `KNOWN_VALUES` for properties present in the table — a typo like `flx` is a compile error suggesting the closest real value. Open-world: properties *not* in the table always pass unchecked. |
-| String literal | `font_family: "system-ui, sans-serif";` | Required for anything with spaces or commas that isn't a unit value |
-| Token path | `background: fictreon_dark.colors.bg_base;` | Dots compile to `::` — must resolve to a real path inside a `tokens!` module (§19) |
-| `${rust_expr}` | `width: ${book.width_px}px;` | Arbitrary Rust expression, must implement `Display`. The only place non-DSL Rust code goes inside a `style!` body — for build-time-only values (feature flags, config), never live per-request data. |
-| Function call | `background: linear_gradient(to right, red, blue);` | snake_case function name auto-converts to kebab-case (`linear-gradient`) in rendered CSS |
-| `var(...)` | `color: var(--accent, red);` | Special-cased — no underscore-to-hyphen conversion applied to the `--name` itself |
-| Comma-separated lists | `box_shadow: 0 1px 2px black, 0 2px 4px black;` | Commas separate segments; multi-shadow, multi-background, etc. all work |
-| `!important` | `color: red !important;` | Literal suffix token, must come last in the declaration |
-| Custom properties (write) | `--accent-override: red;` | Writable directly in a `style!` block — no special syntax needed beyond the leading `--` |
-| Custom properties (read) | `color: var(--accent-override, blue);` | Already works today via the `var(...)` special-case above — reach for this instead of `css{}`/`.style_attr()` when you just need a plain custom property |
-| Property names | `font_weight` written → `font-weight` rendered | Every property name auto-converts snake_case → kebab-case at render time |
+| Number / unit | `16px` `0.85` `10` `100%` `1fr` | `0.85` needs the leading zero |
+| Bare keyword | `display: flex;` `justify-content: space-between;` | Hyphens are fine. Typo-checked (§24). |
+| Several values | `padding: 10px 20px;` `aspect-ratio: 1 / 1;` `font: 12px/1.4 monospace;` | Slashes and spaces just work |
+| Function | `rgba(0, 0, 0, 0.5)` `translate-y(-4px)` `color-mix(in srgb, var(--a) 35%, transparent)` `calc(100% - 8px)` | Name may be dashed or snake |
+| `var()` | `var(--x)` `var(--x, 2px)` | Name normalized to kebab-case |
+| Typed `var()` | `var(tokens.colors.gold)` | Compiler-checked path; renders `var(--colors-gold)` (§19) |
+| Comma lists | `box-shadow: 0 1px 2px black, 0 2px 4px black;` | |
+| `!important` | `display: none !important;` | Must be last |
+| String | `"#C8102E"` `"system-ui, sans-serif"` | Rendered **raw**, without the quotes |
+| Token path | `background: dark.colors.bg;` | Dots become `::`; must exist in a `tokens!` module |
+| `${expr}` | `width: ${w}px;` | Any `Display` value; a unit right after it glues on (`12px`, not `12 px`) |
+| `first-that-works(a, b, c)` | `width: first-that-works(fit-content, -moz-fit-content, 100%);` | Emits fallbacks in browser order (last declaration wins), preferred value last |
+| `content` | `content: "";` `content: "→";` `content: attr(x);` `content: none;` | Quoted strings get CSS quotes; `"''"` passes through |
 
-### Known-values fixed set (numeric weight scale)
+### When you must quote
 
-`font-weight` accepts both keywords and the numeric CSS scale:
-```rust
-font_weight: "700";   // valid — checked against a fixed enumerable set (100–900)
-font_weight: bold;    // also valid, bare keyword form
-```
-This works because `100`–`900` in steps of 100 is a **bounded, enumerable** set. Properties whose numeric range is **unbounded** — `z-index`, `opacity`, `flex-grow`, `flex-shrink`, `order`, `line-height` — are **not** validated against a finite list, and never will be the same way, because any attempt to enumerate `opacity: 0.85` alongside every other valid decimal would eventually reject legitimate CSS as a false positive. These properties pass through unchecked via the open-world fallthrough — not a bug, a deliberate boundary of what a finite lookup table can safely validate.
+Rust's tokenizer reads your CSS before the macro does:
+- **Hex colors: always quote** (`"#1e1e1e"`). `#1e1e1e` lexes as a number with an exponent, and `#0b2b3c` fails to lex.
+- No single-quoted strings; use `"…"`.
+- Backslash escapes are Rust's: write `"\\f101"`.
+- Write `0.5`, not `.5`.
+
+### Bare words turn `_` into `-`
+
+`ease_in_out` renders `ease-in-out`. That includes animation names, so `animation: card_enter 1s` renders `card-enter 1s`. The renderer also normalizes **quoted** names: if the value mentions a known `@keyframes` name written with underscores, it is rewritten to the kebab name. Both spellings work, and the keyframes are always emitted under the kebab name.
 
 ---
 
 ## 17. Selectors & Nesting (Including Arbitrary Depth)
 
-All of the following appear inside a `style! { }` body:
+Everything below goes inside a `style!` body.
 
 | Syntax | Compiles to |
 |---|---|
-| `.classname { decls }` | `.marker .classname { }` — descendant selector |
-| `> .classname { decls }` | `.marker > .classname { }` — direct-child combinator |
-| `&:hover { }` / `&::before { }` / `&.extra { }` | `.marker:hover`, `.marker::before`, `.marker.extra` — suffix appended directly to the parent selector |
-| `&[attr] { }` / `&[attr="value"] { }` | `.marker[attr]`, `.marker[attr="value"]` — same-element attribute selector |
-| `&:nth-child(2n+1) { }` | `.marker:nth-child(2n+1)` — functional pseudo-classes; the parenthesized part is passed through raw |
-| `variant axis { val1 { decls } val2 { decls } }` | `.marker.val1 { }`, `.marker.val2 { }` — one class per variant value |
-| `compound(axis1: val1, axis2: val2) { decls }` | `.marker.val1.val2 { }` — applies only when *all* named variant values are true together |
-| `css { property: raw tokens; }` | Unvalidated raw escape hatch — for CSS features not worth mapping into the DSL grammar (vendor-prefixed properties, etc.); skips `KNOWN_VALUES` entirely |
-| `selector "any css selector" { decls }` | Raw selector escape — **not** scoped under `.marker` at all. For combinator chains too deep or unusual for the nesting grammar below. |
+| `.slot { … }` | `.marker .slot` (descendant) |
+| `> .slot { … }` | `.marker > .slot` (direct child) |
+| `.my-slot { … }` | hyphenated class names work |
+| `.$"odd name" { … }` | raw-string class name for anything else |
+| `&:hover { }` `&::before { }` `&.on { }` | suffix appended to the parent selector |
+| `&[disabled] { }` `&[data-x="y"] { }` | attribute selectors |
+| `&:nth-child(2n+1) { }` | functional pseudos |
+| `&__title { }` `&--primary { }` | BEM, the SCSS way: `.marker__title`, `.marker--primary` |
+| `variant axis { a { … } b { … } }` | `.marker.a`, `.marker.b` (top level only) |
+| `compound(axis1: a, axis2: b) { … }` | `.marker.a.b` (top level only) |
+| `css { -webkit-x: y; }` | never-checked raw declarations. **Allowed in any body**: top, nested, `&`, at-rule, `selector`, variant, compound. |
+| `selector "any css" { … }` | raw selector, **not** scoped under the marker (top level only). May contain at-rules and `css {}`. |
 
-### Arbitrary-depth nesting
-
-`.class{}`/`>.class{}` blocks can now nest **inside each other to any depth**, not just one level:
+Nesting goes to any depth:
 
 ```rust
-style!(card_base {
+style!(card {
     padding: 16px;
-
     > .icon {
-        margin_right: 8px;
-
+        margin-right: 8px;
         .badge {
             position: absolute;
-            top: "0"; right: "0";
-
-            &:hover {
-                transform: "scale(1.1)";
-            }
+            &:hover { transform: scale(1.1); }
         }
     }
 });
 ```
-renders:
 ```css
-.card_base { padding: 16px; }
-.card_base > .icon { margin-right: 8px; }
-.card_base > .icon .badge { position: absolute; top: 0; right: 0; }
-.card_base > .icon .badge:hover { transform: scale(1.1); }
+.card { padding: 16px; }
+.card > .icon { margin-right: 8px; }
+.card > .icon .badge { position: absolute; }
+.card > .icon .badge:hover { transform: scale(1.1); }
 ```
 
-This previously errored with `expected identifier, got Punct '.'` the moment a `.class{}` block appeared inside another `.class{}` block — the parser only recognized `&...{}` and `@media{}` inside a nested block, nothing else. The fix made `.class{}`/`>.class{}` recognized recursively inside `parse_nested_body`, so nesting now goes as deep as you write it. Every existing single-level `.class{}` block still parses and renders identically — this only *adds* the case that used to error.
-
-**If you previously flattened a two-level nesting into sibling top-level classes as a workaround** (e.g. `.cover { }` and a separate `.cover_more_badge { }` instead of `.cover { .more_badge { } }`), that workaround still works fine — there's no need to un-flatten it. The fix means you're no longer *forced* to flatten going forward, not that existing flattened code needs changing.
-
-Comma-grouped multi-selector rules (`.a, .b, .c { }`) are **not** supported as DSL grammar by design — compose multiple variant styles from one shared base via `compose:` instead.
+Rules that catch people:
+- `&` blocks may hold nested `.class { }` and at-rules, but **not another `&`**. Write `&.a.b { }`, not `&.a { &.b { } }`.
+- At-rule bodies hold **declarations only** — never selectors. The at-rule applies to the enclosing selector.
+- Comma-grouped rules (`.a, .b { }`) aren't grammar inside `style!`. Use `compose:`, or a `selector` block when you need a list.
+- Use `selector` for ancestor-gated combinations such as `.split.section_mode .panel`, where the state lives on an ancestor.
+- `compose`, `selector`, `variant` and `compound` are top-level-only; using them in a nested block is an error that says so.
 
 ---
 
 ## 18. `@media` / `@supports` / `@container`
 
 ```rust
-style!(card {
-    padding: 16px;
-
-    @media "(max-width: 768px)" {
-        padding: 8px;
-    }
-});
-```
-
-Same shape for all three at-rule kinds:
-```rust
+@media "(max-width: 768px)" { padding: 8px; }
 @supports "(display: grid)" { display: grid; }
-@container "(min-width: 400px)" { font_size: 18px; }
+@container "(min-width: 400px)" { font-size: 18px; }
+@media breakpoints.bp.mobile { padding: 8px }       // a token constant instead of a string
 ```
 
-At-rules can appear at the top level of a `style!` block, or nested inside any depth of `.class{}` / `> .class{}` block. When multiple composed styles produce an `@media` block with the *same query string*, they're automatically merged into one block in the rendered output rather than emitted as separate duplicate blocks.
+Allowed at the top of a body or inside any nested block. The condition is either a quoted string or a **token path** (a `tokens!` leaf, so breakpoints live in one place). Identical conditions coming from composed styles are merged into one block. Bodies hold declarations (and `css {}`) only.
+
+`global!` accepts the same at-rules as a *wrapper* around selectors (§20).
 
 ---
 
-## 19. `contract!` & `tokens!`
+## 19. `contract!`, `tokens!` & `theme_pack!`
 
-`contract!` declares the *required shape* of a token set, checked at compile time:
+`contract!` declares the *required shape* of a token set:
 
 ```rust
 contract!(ThemeTokens {
-    colors { bg_base text_main }
+    colors { bg text accent }
     radius { sm md lg }
 });
 ```
-generates a trait `ThemeTokens` with one `const` per leaf, path-joined by underscore (`colors_bg_base`, `radius_sm`).
 
-`tokens!` provides an implementation, validated against a named contract:
+generates `trait ThemeTokens` with one `const` per leaf, path-joined by underscore (`colors_bg`, `radius_sm`). Contracts list names only; a `:` here is an error pointing you to `tokens!`.
+
+`tokens!` fills it:
+
 ```rust
 tokens! {
-    fictreon_dark: ThemeTokens {
-        colors { bg_base: "#0b0c10", text_main: "#ffffff" }
+    dark: ThemeTokens {
+        colors { bg: "#0b0c10", text: "#ffffff", accent: "#C8102E" }
         radius { sm: "8px", md: "12px", lg: "16px" }
     }
 }
 ```
-generates `pub mod fictreon_dark { pub mod colors { pub const bg_base: &str = "#0b0c10"; ... } }`, plus a hidden compile-time check that `fictreon_dark` satisfies `ThemeTokens`. **Every leaf value in `tokens!` must be a quoted string literal** — no bare unit literals here, unlike inside a `style!` declaration. Access from a `style!` block via dotted path: `background: fictreon_dark.colors.bg_base;`.
 
-A theme missing a required token is a build error, not something you discover on a rendered page.
+generates:
+- `pub mod dark { pub mod colors { pub const bg: &str = "#0b0c10"; … } … }`
+- **`dark::VARS`**: every token as `("--colors-bg", "#0b0c10")`, ready to publish as CSS variables
+- a hidden compile-time check that `dark` satisfies the contract (a missing token is a build error; an extra one too)
+
+Every leaf is a **quoted string**, even for numbers. Read a token in a style by path: `background: dark.colors.bg;`.
+
+### Publishing tokens as CSS variables
+
+In `theme!`, `vars: dark;` emits `:root { --colors-bg: #0b0c10; … }`. Components then read variables, so a theme swap never touches a component:
+
+```rust
+style!(card { background: var(dark.colors.bg); })     // typed: checked by the compiler, renders var(--colors-bg)
+style!(card { background: var(--colors-bg); })        // plain: any custom property name
+```
+
+A typo in the typed form (`dark.colors.bgg`) is a compile error with rustc's own did-you-mean on that token. A typo in the plain form is a silent dead variable, which is why §22's report flags undefined variables.
+
+### `theme_pack!`: a theme as a partial override
+
+```rust
+theme_pack!(ember: ThemeTokens for "html.theme-ember" {
+    colors { accent: "#FF7A18" }
+});
+```
+
+generates a global style `html.theme-ember { --colors-accent: #FF7A18; }`. Every name is checked against the contract: an unknown name is a compile error. List `ember;` in `theme!` (outside any layer, so it wins; see §22). Switching a pack is toggling a class on `<html>`.
 
 ---
 
@@ -618,11 +642,23 @@ A theme missing a required token is a build error, not something you discover on
 
 ```rust
 global! {
-    * { box_sizing: border-box; }
-    body { margin: "0"; font_family: "system-ui, sans-serif"; }
+    * { box-sizing: border-box; }
+    body { margin: 0; font-family: system-ui, sans-serif; }
+    "html.theme-ocean" { --accent: "#22B8B0"; }
+    @media "(prefers-reduced-motion: reduce)" {
+        * { animation-duration: 0.001ms !important; }
+    }
 }
 ```
-generates `fn __global_styles() -> Vec<Style>`. These are **true bare-selector rules** — resets, `body`, `*`, `@font-face` — not scoped under a generated class the way every other `style!` block is. Reserve `global!` only for rules that genuinely need a bare selector; shared components (cards, buttons, nav) that happen to be reused everywhere still belong in regular `style!` blocks composed via `compose:`, not `global!`.
+
+generates `pub fn __global_styles() -> Vec<Style>`. These are bare-selector rules: resets, `body`, `*`, theme classes, not scoped under a generated class.
+
+Selector rules:
+- **Quoted** (`"html .app"`): used as written. This is the only way to write a descendant selector that starts with a compound.
+- **Unquoted:** `.`, `#`, `:`, `[` and `-` glue to what's before them (`html.theme-ocean`, `a:hover`); two names in a row mean a descendant (`html body`); `>`, `+`, `~` get spaces; `,` separates a list.
+- **`@media` / `@supports` / `@container` wrappers** hold selector blocks.
+
+Property names, custom properties, vendor prefixes and `css {}` work exactly as in `style!`.
 
 ---
 
@@ -630,66 +666,111 @@ generates `fn __global_styles() -> Vec<Style>`. These are **true bare-selector r
 
 ```rust
 keyframes!(card_enter {
-    from { opacity: "0"; transform: "translateY(18px)"; }
-    to   { opacity: "1"; transform: "translateY(0)"; }
+    from { opacity: 0; transform: translate-y(18px); }
+    to   { opacity: 1; transform: translate-y(0); }
+});
+
+keyframes!(pulse {
+    0%, 100% { opacity: 1; }      // several stops can share one block
+    50%      { opacity: 0.4; }
 });
 ```
-Also accepts percentage stops (`0% { }`, `50% { }`, `100% { }`) alongside or instead of `from`/`to`. Generates `fn card_enter_keyframes() -> Keyframes`. Reference the animation the normal CSS way (`animation: "card_enter 550ms ease backwards";`), and include the keyframe function in your `theme! { keyframes: card_enter; }` list so it actually gets rendered into the page's `<style>` output.
+
+- The name is emitted in **kebab-case** (`card-enter`), and `animation: card_enter …` / `animation: "card_enter …"` references are rewritten to match. Keyframes you never reference are listed by the report (§22).
+- Generates `fn card_enter_keyframes() -> Keyframes`; list it under `keyframes:` in `theme!`.
+- Stops accept declarations and `css {}` exactly like a style body.
 
 ---
 
-## 22. `theme!`
+## 22. `theme!` (Layers, Vars, Packs, Report)
 
 ```rust
-theme!("fictreon" {
-    global;
-    book_card;
-    button_primary;
-    keyframes: card_enter;
+theme!("app" {
+    layers: base, components, pages;          // cascade order (optional)
+    external_vars: i, badge_color;            // custom properties set per element with .css_var()
+
+    layer base {
+        global;                               // the global! block
+        vars: dark;                           // :root { --colors-bg: …; }
+    }
+    layer components { card; button; }
+    layer pages { home_hero; }
+
+    ember;                                    // a theme_pack, OUTSIDE every layer: unlayered wins
+    keyframes: card_enter, pulse;
 });
 ```
 
-The theme name must be a string literal. Every style and keyframe name listed **must already be in scope by its generated identifier at the call site** — `theme!` does not search your crate for you. A style you forgot to `use` produces a plain "cannot find value" compiler error pointing at the `theme!` invocation, not at the missing `use` (§29 gotcha). `global;` (bare keyword) pulls in your `global! { }` block's rules.
+- **The name** must be a string of letters, digits and underscores. It becomes the function prefix.
+- **Entries:** `name;` (a style or pack), `global;`, `vars: tokens_module;`, `keyframes: a, b;`, `layers: …;`, `external_vars: …;`, `layer name { … }`.
+- **Reserved words** you can't use as style names: `layer`, `layers`, `vars`, `global`, `keyframes`, `external_vars`.
+- Every style name must be in scope by its generated type name (`card` needs `Card`). A missing import fails at the `theme!` line.
+- **Without `layers:`**, layers are ordered by first appearance. A `layer x` not in the `layers:` list is an error with a did-you-mean.
+- **Layers:** the output starts with `@layer base, components, pages;` and each group is wrapped in `@layer name { … }`. A later layer beats an earlier one regardless of selector specificity or source order, so "a page beats a component" is by construction. **Unlayered styles beat every layer**, which is why packs go outside.
+- List order inside a group is CSS order.
 
-Generates two functions:
-- `fn fictreon_theme() -> chain_ui_core::Element` — a `<style>` element, chain into your page shell's `<head>` via `.child(...)`
-- `fn fictreon_css() -> &'static str` — the resolved CSS string, cached in a `static OnceLock` so the full resolve/dependency-graph/render pipeline runs **exactly once per process**, not once per request
+### What it generates (for `theme!("app" …)`)
+
+| Function | Returns | Notes |
+|---|---|---|
+| `app_css()` | `&'static str` | Resolved once per process (`OnceLock`). Pretty in debug (with `file:line` comments), minified in release. |
+| `app_theme()` | `Element` | A `<style>` element (uses `raw_html`, §27) |
+| `app_css_version()` | `u64` | Content hash. Use as `?v=…` for cache busting. |
+| `app_report()` | `String` | Size, undefined `var()`s, unused keyframes, duplication (below) |
 
 ```rust
 #[tokio::main]
 async fn main() {
-    let _ = fictreon_css();   // forces resolution now — catches a compose: cycle
-                               // panic before the server starts, not on first hit
-    // ...
+    let _ = app_css();   // forces resolution now: a compose cycle or unknown compose panics at startup
 }
 ```
 
-Dev builds (`cfg!(debug_assertions)`) keep the CSS pretty-printed, useful for a debug route like `/__css`; release builds automatically minify with no separate feature flag.
+### The report
+
+```
+chain_ui_style report
+  size:    12,345 bytes, 214 rules, 38 custom properties defined
+  layers:  base, components, pages
+
+  problems:
+    ✗ var(--acent) has no fallback and is never defined
+        help: publish it from your tokens, give it a fallback `var(--acent, …)`, or list it in `external_vars:` if you set it with .css_var()
+    ✗ @keyframes `card-enter` is defined but no `animation` uses it
+
+  duplication (measure before optimizing):
+    8x identical block (46 bytes): .a, .b, …
+  most repeated declarations:
+     41x  transition: opacity 0.3s ease
+```
+
+Serve it at `/__report` while you work. It is the data to consult *before* deciding CSS size needs optimizing.
 
 ---
 
 ## 23. `sprinkles!`
 
 ```rust
-sprinkles!(fictreon_dark {
-    padding: spacing { xs, sm, md, lg };
-    margin: spacing { xs, sm, md, lg };
+sprinkles!(dark {
+    padding: spacing { sm, md };
+    margin: spacing { sm, md };
 });
 ```
-Generates one tiny, single-declaration `StyleDef` per `(property, key)` pair, reading its value straight from an existing `tokens!` module. Class name is the property and key joined verbatim (`padding_md`) — no abbreviation magic. This is an atomic-utility escape hatch for one-off spacing/etc. tweaks; it does not replace named `style!` components as the primary API, and it's opt-in — nothing generates sprinkles unless you explicitly write a `sprinkles!` block.
+
+One tiny single-declaration style per `(property, key)`, reading its value from a `tokens!` module. Class name is the property and key joined (`padding_md`, marker `PaddingMd`). List them in `theme!` like any style (`padding_sm; padding_md;`). It's an opt-in utility escape hatch for one-off spacing, not the primary API.
 
 ---
 
 ## 24. Known-Value Validation
 
-`KNOWN_VALUES: &[(&str, &[&str])]` maps CSS property names (kebab-case) to their valid keyword values. When a `style!` declaration's value is a single bare keyword literal, it's checked at macro-expansion time:
+A built-in table maps about 90 CSS properties to their keywords. The check is intentionally gentle:
 
-- **Property present in the table, value not in its list** → compile-time error with a Levenshtein-matched suggestion (`display: flx;` → *"did you mean `flex`?"*).
-- **Property not present in the table** → always passes. Open-world by design; it only narrows, never blocks a property it doesn't know about.
-- Only applies to **single-segment bare-keyword values** — a value built from multiple segments (`${...}` interpolation, function call, token path) is never checked here, since it isn't statically known at macro time.
-- **The lookup key is kebab-case, not the raw Rust identifier.** `justify_content` (the identifier you write) is converted to `justify-content` *before* the validator looks it up — this conversion has to happen inside `value_parser.rs`, not deferred to render time, or every hyphenated property silently skips validation (§29 gotcha — this was a real bug, now fixed).
+- It applies only to a **single bare keyword** (`display: flx;`). Quoted strings, functions, numbers, token paths, `${}`, `var()`, `!important` values, `css {}` blocks and `content` are never checked.
+- A keyword that **looks like a typo of a known one** is an error with a suggestion (distance ≤ max(2, ¼ of the keyword's length)). A word far from every known keyword passes: the table is best-effort and must never block real CSS.
+- CSS-wide keywords (`inherit`, `initial`, `unset`, `revert`, `revert-layer`) and vendor values (`-webkit-box`) always pass.
+- Unbounded numeric properties (`z-index`, `opacity`, `flex-grow`, `line-height`…) have no keyword table and are never validated.
+- **Property names:** about 290 known names are used for typo detection (`disply` → `display`). Unknown names pass unless they're within edit-distance 2 of a known one (1 for short names).
 
-This table is your main compile-time typo safety net in the whole DSL.
+The table's lookup key is kebab-case, so `justify_content` is checked as `justify-content`.
 
 ---
 
@@ -697,169 +778,159 @@ This table is your main compile-time typo safety net in the whole DSL.
 
 ```rust
 // owned by chain_ui_core
-pub trait ClassMarker {
-    const NAME: &'static str;
-}
+pub trait ClassMarker { const NAME: &'static str; }
 ```
 
-This is the **entire** surface area `chain_ui_core` exposes for styling integration — one trait, one associated constant. It exists because of the strict one-way dependency (§1): `chain_ui_style` depends on `chain_ui_core`, so `chain_ui_core` can never depend back on it, yet `.style::<Marker>()` needs to live *somewhere* both sides can use.
+This is the **entire** surface `chain_ui_core` exposes for styling integration. It exists because of the one-way dependency: `chain_ui_style` depends on core, so core can never depend back, yet `.style::<Marker>()` needs a type both sides can use.
 
-`chain_ui_style`'s `StyleDef` trait builds on top of it instead of duplicating the constant:
+`chain_ui_style`'s `StyleDef` builds on it:
+
 ```rust
-pub trait StyleDef: chain_ui_core::ClassMarker {
-    fn build() -> crate::ast::Style;
-}
+pub trait StyleDef: chain_ui_core::ClassMarker { fn build() -> crate::ast::Style; }
 ```
 
-When you write `style!(book_card { ... })`, the macro expands to **two separate `impl` blocks** on the generated `BookCard` marker:
-```rust
-impl chain_ui_core::ClassMarker for BookCard {
-    const NAME: &'static str = "book_card";
-}
-impl chain_ui_style::registry::StyleDef for BookCard {
-    fn build() -> chain_ui_style::ast::Style { /* ... */ }
-}
-```
+`style!(book_card { … })` expands to a marker struct plus two `impl`s, one per trait. You can implement `ClassMarker` by hand for a class that has no `style!` behind it:
 
-Splitting them means the `NAME` constant — the only piece core's `.style()` method actually needs — has zero dependency on anything AST- or CSS-shaped. You can implement `ClassMarker` by hand for a marker that has nothing to do with `chain_ui_style` at all:
 ```rust
 struct Highlighted;
-impl chain_ui_core::ClassMarker for Highlighted {
-    const NAME: &'static str = "highlighted";
-}
+impl chain_ui_core::ClassMarker for Highlighted { const NAME: &'static str = "highlighted"; }
 tag::div().style::<Highlighted>().child("hi")
 ```
 
-There is no separate `StyleExt` trait to import — `.style()`, `.css_var()`, and `.css_vars()` are plain methods on `Element`/`VoidElement`, available the instant you `use chain_ui_core::prelude::*;`, even in a file that never touches `chain_ui_style` at all.
+When a `style!` has errors, its marker type is **still emitted** (with an empty style), so one mistake doesn't cascade into "cannot find type" errors across your crate.
 
 ---
 
 ## 26. `.style()` / `.css_var()` / `.css_vars()`
 
 ```rust
-pub fn style<M: ClassMarker>(self) -> Self {
-    self.class(M::NAME)
-}
+pub fn style<M: ClassMarker>(self) -> Self { self.class(M::NAME) }
 ```
 
-Lives in `chain_ui_core`, generic over any `ClassMarker`. Calling it is **exactly equivalent** to calling `.class("the marker's NAME string")` — nothing more. That equivalence has two real consequences:
+Exactly `.class(NAME)`: it merges like any class (`.style::<A>().style::<B>()` → `class="a b"`), and it must come before the first `.child()`.
 
-- **It merges like any class.** `.style::<A>().style::<B>()` produces `class="a-name b-name"`, not two separate `class=` attributes — because it's the same `.class()` machinery underneath.
-- **It follows the same ordering rule.** `.style::<Marker>()` must be called before the element's first `.child()`, exactly like any other attribute method — because it isn't a distinct code path, it's `.class()` wearing a type-checked name.
+**Which of two classes wins** is decided by CSS order, not call order: later in the `theme!` list (or in a later layer) wins. Use layers when "page beats component" must hold.
+
+`.css_var()` / `.css_vars()` carry **per-instance data**. A `style!` resolves once at startup and can't know one book's rating, so the value goes onto the element as a custom property that the style reads back:
 
 ```rust
-tag::div()
-    .style::<BookCard>()      // must come before .child()
-    .child("a book")
+style!(rating_badge { background: var(--rating-color, gray); });
+
+tag::span().style::<RatingBadge>().css_var("rating_color", if r > 4.0 { "gold" } else { "gray" })
 ```
 
-`.css_var()`/`.css_vars()` exist for exactly one situation `style!` classes can't handle alone: **per-instance dynamic values.** A `style!` block resolves once, at process startup — it has no idea what one individual book's rating is. `.css_var()` writes a CSS custom property directly onto the element's `style="..."` attribute at render time, and your `style!` block reads it back with `var(--name)`:
+Names are kebab-cased on both sides (`rating_color` and `rating-color` are the same variable). Both route through `.style_attr()`, which merges, so several `.css_var()` calls produce **one** `style="…"` attribute.
 
-```rust
-style!(rating_badge {
-    background: var(--rating_color, gray);
-});
-```
-```rust
-tag::span()
-    .style::<RatingBadge>()
-    .css_var("rating_color", if book.rating > 4.0 { "gold" } else { "gray" })
-    .child(...)
-```
-
-This is the load-bearing reason `chain_ui_style` never generates one class per data instance — dynamic data always flows through custom properties on an otherwise-static, cacheable class.
-
-Both route through `.style_attr()`, which merges across repeated calls the same way `.class()` merges — so `.css_var()` called multiple times, or mixed with a manual `.style_attr()` call for an unrelated one-off inline style, combines into a **single** `style="..."` attribute instead of writing several (which the HTML parser would silently collapse to just the first one, dropping the rest — this was a real bug, now fixed by making `style_attr` merge-aware the same way `class` always was).
+If a variable is only ever set this way, list it under `external_vars:` in `theme!` so the report doesn't flag it as undefined. The same trick drives staggered entrances: `.css_var("i", n)` plus `animation-delay: calc(var(--i, 0) * 50ms)`.
 
 ---
 
 ## 27. Why CSS Needs `raw_html()`
 
-The single most important integration detail between the two crates, and the one most likely to bite silently.
+`Element::child()` on a `&str`/`String` runs it through `escape_text`: `>` becomes `&gt;`. Correct for text; **wrong for CSS**, because a `<style>` tag's contents are raw text. A literal `>` from `> .child { }` that gets escaped reaches the CSS parser as the characters `&gt;`, and the rule silently dies. No error, no panic.
 
-`Element::child()` on a `String`/`&str` always runs it through `escape_text` — `&` becomes `&amp;`, `<` becomes `&lt;`, `>` becomes `&gt;`. Correct and necessary for arbitrary user-facing text. **Wrong** for CSS: browsers parse the contents of a `<style>` tag as raw text with no entity decoding. If your rendered CSS contains a literal `>` (from `> .child { }`) and it gets entity-escaped on the way into the HTML stream, the browser doesn't decode it back — the CSS parser receives the literal four characters `&gt;`, and the rule silently fails to parse. No error, no panic, just a dead rule.
-
-Both places that hand CSS to core use `raw_html()` instead of a bare `.child(string)`:
+Both places that hand CSS to core use `raw_html()`:
 
 ```rust
 // chain_ui_style::render::render_theme
 pub fn render_theme(styles: Vec<Style>) -> Element {
     tag::style().child(chain_ui_core::raw_html(render_css(styles)))
 }
-```
-```rust
 // generated by theme!
-pub fn fictreon_theme() -> chain_ui_core::Element {
-    chain_ui_core::tag::style().child(chain_ui_core::raw_html(fictreon_css()))
+pub fn app_theme() -> chain_ui_core::Element {
+    chain_ui_core::tag::style().child(chain_ui_core::raw_html(app_css()))
 }
 ```
 
-The rule in general: **anything that is markup or CSS you generated and trust goes through `raw_html()`; anything that is literal text a person typed goes through plain `.child()`.** Mixing these up in either direction is a real bug — trusting user text is an XSS hole, escaping your own generated CSS/HTML corrupts it.
+The rule: **markup or CSS you generated and trust goes through `raw_html()`; text a person typed goes through plain `.child()`.** Mixing them up either way is a real bug. A trusted-text bug is an XSS hole, and an escaped-CSS bug is dead rules.
 
 ---
 
 ## 28. Recommended Folder Layout
 
-Mirrors a two-layer CSS design model: GLOBAL defines what the whole app looks like (tokens, base rules, shared components, application shell), PAGE defines how one page arranges those rules.
+Two layers: GLOBAL defines what the whole app looks like (tokens, variables, base rules, shared components), PAGE defines how one page arranges those parts. Values flow down only: a file may use things above it, never below, and pages never import other pages.
 
 ```
 fictreon_style/
   src/
-    tokens.rs                    — tokens! / contract!
-    global.rs                    — global! bare-selector rules, keyframes!
-    components/
-      shell.rs button.rs card.rs section.rs carousel.rs   — shared, reused everywhere
-    pages/
-      home.rs collection.rs box_office.rs create_collection.rs   — page-specific arrangement only
-    theme.rs                     — theme!, pulling everything together
+    tokens.rs            contract! + tokens!            the ONLY place raw values live
+    global.rs            global!                        resets, plus theme-class rules
+    packs.rs             theme_pack! blocks             overrides of the published variables
+    keyframes.rs         keyframes!
+    components/          shared across pages
+      chrome.rs  cards.rs  hero.rs  misc.rs  mod.rs
+    pages/               unique to ONE page
+      home.rs  profile.rs  book.rs  mod.rs
+    theme.rs             theme!   (the table of contents)
     lib.rs
 ```
 
-Promotion path: a rule that starts page-specific and turns out to be reused elsewhere is promoted to `components/` by moving the `style!` block between files — no syntax change required, since every block is a normal Rust item either way.
-
-**Application layer mirrors this at the fetch/view level.** One folder per data section (not per page) — each with `model.rs`/`fetch.rs`/`view.rs`, assembled in a parent `mod.rs`:
+The view side mirrors it one-to-one:
 
 ```
-fic_readers/
-  home/
-    mod.rs
-    hero/         model.rs  fetch.rs  view.rs
-    trending/     model.rs  fetch.rs  view.rs
-    authors/      model.rs  fetch.rs  view.rs
-  box_office/
-    mod.rs
-    podium/       model.rs  fetch.rs  view.rs
-    rank_list/    model.rs  fetch.rs  view.rs
-    featured/     model.rs  fetch.rs  view.rs
+fic_shared/              the view kit: the same parts as Rust functions
+  icons.rs  cards.rs  shell.rs
+home/     data.rs  view.rs  js.rs  mod.rs     a page = seed data + view + flare
+profile/  data.rs  view.rs  js.rs  mod.rs
+book/     data.rs  view.rs  js.rs  mod.rs
 ```
 
-This is not premature abstraction or a database overhaul — every `fetch.rs` today calls plain seed-data functions; the day a real query replaces seed data, only the *inside* of that one function's body changes, keeping the same return type. The folder boundary is exactly the seam where "seed data" becomes "real query." Share a query across sections via a function in the model crate (e.g. `copies_sold()`, `book_rating_aggregate()`) rather than duplicating the same filter logic inside two different `fetch.rs` files — the folder-per-section rule governs *where view/model/fetch live*, not whether you're allowed to share an underlying aggregate.
+`styles/pages/book.rs` pairs with `book/`; `components/cards.rs` pairs with `fic_shared/cards.rs`.
+
+**Where does it go?**
+
+| It is… | It goes in… |
+|---|---|
+| a color, size, radius, breakpoint | `tokens.rs` |
+| a variable publication or a reset | `global.rs` / `vars:` in `theme!` |
+| an override for a theme | `packs.rs` (`theme_pack!`) |
+| used by 2+ pages | `components/` |
+| used by exactly one page | `pages/<page>.rs` |
+| a page's gated arrangement of shared parts | a small style in `pages/` layered on the component |
+
+**Promotion path.** When a second page needs a page-local block, move it into `components/`. There's no syntax change: every block is an ordinary Rust item.
+
+**Layers map onto the folders:**
+
+```rust
+theme!("fictreon" {
+    layers: base, components, pages;
+    layer base { global; vars: fictreon_dark; }
+    layer components { /* everything from components/ */ }
+    layer pages { /* everything from pages/ */ }
+    ember; ocean;                    // packs: unlayered, so they win
+    keyframes: …;
+});
+```
+
+**Conventions.**
+- Marker = a noun for the thing (`square_card`, `profile_tabs`); page-only markers carry the page prefix.
+- Slots are inner classes you style through the marker: `.cover` `.label` `.title` `.ico`.
+- States are classes JS flips: `.active` `.hidden` `.open` `.show` `.pending` `.in_view`; modes live on an ancestor (`.section_mode`).
+- Hooks for JS are `data-*` attributes or `#ids`, never styling classes.
+- Per-instance data is a CSS custom property.
+- Components contain no raw colors: alpha comes from `color-mix(in srgb, var(--x) 35%, transparent)`, so a pack only ever supplies plain values.
 
 ---
 
 ## 29. Gotchas & Troubleshooting Checklist
 
-Real issues found and fixed while integrating these two crates on a real project — kept as a running list.
-
-- **`raw_html()` on both CSS emission points** (§27). Skipping this silently corrupts any generated CSS containing `>`, `<`, or `&`. No compiler error, no panic — just dead rules in the browser, visible only by view-source or an unexplained missing style.
-
-- **`.attr()`/old `.style_attr()` don't merge by default.** Before the merge fix, calling `.css_var()` more than once, or mixing it with a manual `.style_attr()` call, wrote multiple `style="..."` attributes on the same tag — the HTML parser silently keeps only the first and drops the rest. Fixed as of §26; if you're on an older copy of the crate, upgrade.
-
-- **Known-value validation must use kebab-case, not the raw snake_case identifier.** Properties are written as snake_case Rust idents (`justify_content`) but `KNOWN_VALUES` is keyed in kebab-case (`justify-content`). Validating against the unconverted identifier makes every hyphenated property silently skip typo checking. Fixed — confirm your `value_parser.rs` converts before calling `validate()`.
-
-- **There is no `.render()` method on `Element`.** Inside a `.child(|| { for x in xs { ... } })` loop, just let each built element drop — its `Drop` impl auto-appends it. Calling a nonexistent `.render()` is a compile error, but it's an easy assumption to carry over from other templating libraries.
-
-- **`theme! { ... }` requires every listed name already imported at the call site.** The macro does not search your crate. A forgotten `use` produces a plain "cannot find value" error pointing at the `theme!` invocation, not at the missing import — check your imports first when this happens.
-
-- **`tokens!` leaf values must be string literals**, even where the equivalent value would be a valid bare unit literal inside `style!` (`16px` works in `style!`; `spacing { md: 16px }` inside `tokens!` does not — it must be `"16px"`). The two macros parse their bodies with different grammars despite looking similar.
-
-- **Two levels of `.class{}` nesting used to be a hard parser error** (`expected identifier, got Punct '.'`). Fixed as of §17 — arbitrary depth now works. If you flattened nested selectors into sibling top-level classes as a workaround before this fix landed, that flattened code still works fine; no need to revert it.
-
-- **Enumerable vs. unbounded numeric properties.** `font-weight`'s `100`–`900` scale is safely enumerable and validated. `opacity`, `z-index`, `flex-grow`, `flex-shrink`, `order`, `line-height` are not — and never will be validated the same way, because any finite list would eventually reject a legitimate decimal/negative value as a false positive. These pass through unchecked; that's by design, not a gap waiting to be closed the same way.
-
-- **`compose:` cycles panic at first resolution, not at the `style!` call site.** Call your theme's `_css()` function once in `main()` before the server starts accepting requests, so a cycle surfaces at startup instead of on the first real request that happens to touch it.
-
-- **Data-model gaps are not a `chain_ui_style`/`chain_ui_core` problem, but they'll masquerade as one.** A page that "looks wrong" because seed data doesn't cover what the view expects (a missing user, a missing book) isn't a styling bug — check `fic_model`'s seed functions for dangling references before assuming the render pipeline is at fault.
+- **`raw_html()` on both CSS emission points** (§27). Skipping it silently corrupts CSS containing `>`, `<`, or `&`.
+- **`.attr("style", …)` doesn't merge.** Use `.style_attr()` or `.css_var()`, which write one merged attribute.
+- **There is no `.render()` method on `Element`.** Inside a `.child(|| { … })` loop, let built elements drop.
+- **`theme!` requires every listed name in scope.** A missing `use` fails at the `theme!` line as "cannot find type". Check imports first. If a `style!` itself had an error, fix that one first: the type is still emitted, so you'll see only the real error.
+- **`tokens!` leaf values must be quoted strings**, even for `16px`.
+- **Hex colors must be quoted** in `style!` (`"#1e1e1e"`). Rust's tokenizer reads `#1e1e1e` as a number.
+- **`@media "…"` is not allowed directly inside `global!` selectors' bodies**, but it is allowed as a *wrapper* around selector blocks (§20).
+- **Animation names:** bare and quoted forms are both normalized to the kebab-case keyframes name (§16/§21). An animation that "does nothing" usually means the keyframes aren't listed under `keyframes:` in `theme!`, so check the report for an unused or missing keyframe.
+- **A style missing from `theme!`** renders unstyled, with no error. List every style.
+- **A custom property that nothing defines** is a silent dead `var()`. The report (§22) flags it; for per-element variables use `external_vars:`.
+- **Which of two classes wins** follows CSS order. Use layers for guaranteed precedence (§22).
+- **`compose:` problems are startup panics**, not compile errors (cycle, unknown name). Call `<theme>_css()` in `main()`.
+- **Hover doesn't need a media guard** in this engine, but sticky hover on touch screens is a browser behavior. Guard with `@media "(hover: hover)"` if it matters.
+- **Reserved `theme!` words** can't be style names (§22).
+- **`database is locked` from cargo** is harmless: another cargo process (often rust-analyzer) holds the cache lock.
+- **Data-model gaps masquerade as styling bugs.** A page that looks wrong because seed data doesn't cover what the view expects isn't a styling problem.
 
 ---
 
@@ -869,54 +940,174 @@ Real issues found and fixed while integrating these two crates on a real project
 
 | Item | Signature (abridged) |
 |---|---|
-| `tag::{div, section, nav, main, header, footer, aside, article, address, details, summary, dialog, h1..h6, p, span, a, strong, em, small, blockquote, pre, code, kbd, sub, sup, mark, time, del, ins, ul, ol, li, dl, dt, dd, form, label, textarea, select, option, optgroup, button, fieldset, legend, output, progress, meter, table, thead, tbody, tfoot, tr, th, td, caption, colgroup, video, audio, iframe, canvas, picture, map, object, html, head, body, title, style, script, noscript, svg, datalist}` | `() -> Element` |
+| `tag::{div, section, …, datalist}` | `() -> Element` (full list in §5) |
 | `tag::{br, hr, img, input, link, meta, area, base, col, embed, param, source, track, wbr}` | `() -> VoidElement` |
 | `svg::{g, defs, symbol, clipPath, mask, linearGradient, radialGradient, text, tspan, marker, foreignObject}` | `() -> Element` |
 | `svg::{path, circle, rect, line, ellipse, polygon, polyline, stop, image}`, `svg::r#use` | `() -> VoidElement` |
-| `svg::circle_icon(r)` `svg::check_path()` `svg::rounded_square(radius)` | `() -> Element` — geometric icon helpers |
+| `svg::circle_icon(r)` `svg::check_path()` `svg::rounded_square(radius)` | `() -> Element` |
 | `Element::new(tag)` / `VoidElement::new(tag)` | `&'static str -> Self` |
-| `.class(c)` / `.class_if(cond, c)` / `.classes_if(iter)` | see §6 |
-| `.attr(k, v)` / `.attr_if(cond, k, v)` | see §6 |
-| `.id` `.src` `.href` `.alt` `.name` `.value` `.placeholder` `.type_` | see §6 |
-| `.flag` `.disabled` `.required` `.readonly` `.checked` | see §6 |
-| `.style_attr(css)` | see §6, §26 |
-| `.style::<M: ClassMarker>()` `.css_var(name, value)` `.css_vars(&[(name, &dyn Display)])` | see §25, §26 |
-| `.modify(f)` | see §6 |
+| `.class` `.class_if` `.classes_if` `.attr` `.attr_if` `.id` `.src` `.href` `.alt` `.name` `.value` `.placeholder` `.type_` `.flag` `.disabled` `.required` `.readonly` `.checked` `.style_attr` `.style::<M>` `.css_var` `.css_vars` `.modify` | see §6 |
 | `.child(x: impl IntoStream)` | see §7 |
-| `raw_html(s)` | `impl Into<ChainStr> -> RawHtml`, see §27 |
+| `raw_html(s)` | `impl Into<ChainStr> -> RawHtml` |
 | `.build()` | `-> ChainMarkup` |
 | `.render_to(writer)` | `-> io::Result<()>` |
 | `.push_raw_bytes(bytes)` | `&[u8] -> Self` (Element only) |
-| `chain_fmt!(...)` | macro, format-args-like |
-| `cache::component / set / try_get / clear_local_cache / cache_len` | see §11 |
-| `#[context(...)]` | macro, see §12 |
-| `popover_trigger` `popover_panel` `auto_closing_dialog` `dialog_cancel_button` `autocomplete_input` `lazy_img` `progress_bar` `time_tag` `download_link` `external_link` | see §13 |
-| `PageShell` trait | `fn wrap(title: &str, content: Element) -> Element` |
-| `ClassMarker` trait | `const NAME: &'static str`, see §25 |
+| `chain_fmt!(…)` | format-args-like macro |
+| `cache::{component, set, try_get, clear_local_cache, cache_len}` | §11 |
+| `#[context(…)]` | §12 |
+| `popover_trigger` `popover_panel` `auto_closing_dialog` `dialog_cancel_button` `autocomplete_input` `lazy_img` `progress_bar` `time_tag` `download_link` `external_link` | §13 |
+| `PageShell` | `fn wrap(title: &str, content: Element) -> Element` |
+| `ClassMarker` | `const NAME: &'static str` |
 
 ### chain_ui_style macros
 
 | Macro | Signature | Generates |
 |---|---|---|
-| `style!` | `style!(name { compose: a, b; prop: value; ... })` or `style!("name" { ... })` | `struct Name;` implementing `ClassMarker` + `StyleDef` |
-| `contract!` | `contract!(Name { field { sub } });` | `trait Name { const field_sub: &'static str; ... }` |
-| `tokens!` | `tokens!(set_name: ContractName { field { sub: "value" } });` | `mod set_name { mod field { const sub: &str = "value"; } }` + compile-time contract check |
-| `global!` | `global! { selector { decls } ... }` | `fn __global_styles() -> Vec<Style>` |
-| `keyframes!` | `keyframes!(name { from { decls } to { decls } });` | `fn name_keyframes() -> Keyframes` |
-| `theme!` | `theme!("name" { style_a; style_b; global; keyframes: kf1, kf2; });` | `fn name_theme() -> Element`, `fn name_css() -> &'static str` |
-| `sprinkles!` | `sprinkles!(theme_mod { prop: submodule { key1, key2 }; });` | one `StyleDef` per `(prop, key)` pair |
+| `style!` | `style!(name { compose: a, b; prop: value; … })` | marker struct + `ClassMarker` + `StyleDef` |
+| `contract!` | `contract!(Name { group { leaf } })` | `trait Name { const group_leaf: &'static str; … }` |
+| `tokens!` | `tokens!(set: Name { group { leaf: "v" } })` | `mod set` (consts + `VARS`) + contract check |
+| `theme_pack!` | `theme_pack!(name: Contract for "selector" { group { leaf: "v" } })` | a global style marker overriding `--group-leaf` variables |
+| `global!` | `global! { selector { … } "quoted" { … } @media "…" { selector { … } } }` | `fn __global_styles() -> Vec<Style>` |
+| `keyframes!` | `keyframes!(name { from { … } 50% { … } 0%, 100% { … } to { … } })` | `fn name_keyframes() -> Keyframes` |
+| `theme!` | `theme!("x" { layers: …; external_vars: …; layer l { … } name; global; vars: set; keyframes: …; })` | `x_css()`, `x_theme()`, `x_css_version()`, `x_report()` |
+| `sprinkles!` | `sprinkles!(set { prop: group { key, key }; })` | one style per `(prop, key)` |
 
-### chain_ui_style types
+### chain_ui_style runtime
 
 | Item | Notes |
 |---|---|
-| `render::render_theme(styles: Vec<Style>) -> Element` | Called internally by `theme!`'s generated function; uses `raw_html()` internally (§27) |
-| `render::render_css(styles: Vec<Style>) -> String` | Resolved, unwrapped CSS string |
-| `render::render_keyframes(kf: &Keyframes) -> String` | |
-| `render::minify(css: &str) -> String` | Whitespace-collapsing minifier, used automatically in release builds |
-| `registry::StyleDef` trait | `: chain_ui_core::ClassMarker { fn build() -> Style; }`, see §25 |
-| `ast::{Style, Declaration, NestedRule, ParentRule, AtRule, RawRule, Keyframes}` | The AST types — `NestedRule` carries a `children: Vec<NestedRule>` field enabling arbitrary-depth nesting (§17) |
+| `render::render_theme(styles) -> Element` | uses `raw_html` internally |
+| `render::render_css(styles) -> String` | simple resolve + render |
+| `render::render_theme_css(layer_order, groups, keyframes, opts) -> String` | what `theme!` calls: layers, keyframe-name normalization, comments, optional minify |
+| `render::RenderOpts { comments, minify }` | |
+| `render::render_keyframes(kf) -> String` | |
+| `render::minify(css) -> String` | respects quoted strings, strips comments |
+| `registry::StyleDef` | `build() -> Style` |
+| `registry::root_vars_style(selector, vars) -> Style` | what `vars:` uses |
+| `report::analyze(css, external_vars) -> Report`, `Report::to_text()` | the lint/stats pass |
+| `report::fnv1a(&str) -> u64` | the version hash |
+| `completion::{props, values}` | generated lists that power autocomplete (§32) |
+| `ast::{Style, Declaration, NestedRule, ParentRule, AtRule, RawRule, Keyframes}` | all `Default`; `Style` has a `source: Option<&'static str>` |
 
+---
 
+## 31. Diagnostics: Reading and Fixing Errors
 
+Every style/theme/token error has this shape, and the red squiggle is on the offending token:
 
+```
+error: chain_ui_style: <what is wrong>
+  = note: <extra context>
+  = help: <what to do>
+  = example:
+      <a working version>
+```
+
+One build reports all of them. The parser recovers after an error (it skips to the next `;` or block), so fixing the first doesn't reveal a second wave.
+
+| Message starts with | Cause | Fix |
+|---|---|---|
+| `unknown CSS property 'disply'` | Looks like a typo of a known property | Use the suggestion, or put a genuinely newer property in `css { }` |
+| `'flx' is not a valid value for 'display'` | Looks like a typo of a known keyword | Use the suggestion |
+| `missing ';' after the value of 'padding'` | Next line started a new declaration | Add the semicolon (only the last declaration may omit it) |
+| `'title' is followed by a { … } block, but it is not a selector` | A property name with a block | Class: `.title { }`. State: `&:hover { }`. Property: `title: value;` |
+| `expected a { … } block, found …` after `.name` | Class with no block | Add the block; a state is `&:hover { }` |
+| `duplicate property 'font-size'` | Same property twice in a block (`font_size` counts as the same) | Remove one, or override in the style that composes it |
+| `'compose:' is only allowed at the top …` | `compose`, `selector`, `variant` or `compound` inside a nested block | Move it to the top level of the style |
+| `a '&' block can't contain another '&' block` | `&.a { &.b { } }` | `&.a.b { }` |
+| `unsupported at-rule '@mdia'` | Typo | `@media`, `@supports` or `@container` |
+| `'@media' needs a condition` | No string or token path | `@media "(max-width: 600px)" { }` or `@media bps.bp.mobile { }` |
+| `a typed variable needs a full token path` | `var(colors.bg)` | `var(dark.colors.bg)` |
+| `the value of token 'x' must be a quoted string` | `tokens!` leaf not quoted | `x: "16px"` |
+| `layer 'basee' is not in 'layers:'` | Typo | Use the suggestion, or add it to `layers:` |
+| `'first-that-works()' needs at least two alternatives` | One argument | List the preferred value first, then fallbacks |
+| `cannot find value 'acent' in module 'colors'` (from rustc) | Typo in a typed `var()` or a token path | rustc suggests the right name |
+| `not all trait items implemented, missing: colors_x` (from rustc) | A `tokens!` set is missing something its contract requires | Add the token |
+| (panic at startup) `style 'a' has compose: b; but no style named b is in this theme` | Unknown compose target | Add `b;` to `theme!`, or fix the name (did-you-mean shown) |
+| (panic at startup) `circular compose` | A compose loop | Remove one `compose:` |
+
+**Internal errors.** A message that starts `internal error:` means the engine itself panicked. Report it with the macro invocation that triggered it.
+
+---
+
+## 32. Editor Autocomplete
+
+Inside a `style!` body, rust-analyzer can complete:
+- **Property names** (`disp|` → `display`, with the allowed values in the popup)
+- **Keyword values** (`display: fl|` → `flex`, `flow_root`)
+- **Token paths** (`dark.col|`) and **typed variables** (`var(dark.col|)`)
+- **Breakpoint constants** (`@media bps.bp.mo|`)
+
+It does **not** complete class names after `.`, `compose:` targets, or the `theme!` list.
+
+How it works: when rust-analyzer asks for completions it inserts a marker word at the cursor and re-expands the macro. The macro then emits a hidden reference into the generated `chain_ui_style::completion::{props, values}` lists behind `#[cfg(rust_analyzer)]`, so `cargo build` never sees it. Type underscore forms (`inline_flex`); the engine treats `_` and `-` the same in bare words.
+
+Setup check:
+1. Rebuild once so rust-analyzer loads the new macro.
+2. In a style, type `disp` and press Ctrl+Space.
+3. If nothing appears, set `"rust-analyzer.cargo.cfgs": ["debug_assertions", "miri", "rust_analyzer"]` and reload the window.
+
+If your editor doesn't run rust-analyzer, no macro can add completion there. Use snippets (`sty`, `med`, `hov`, `slot`, `kid`, `sel`, `variant`, `kf`, `thm`) as the fallback.
+
+---
+
+## 33. The Lab: Testing the Engine
+
+The lab is a small binary (`main.rs` in a test crate) that defines styles using every feature, builds the CSS, and checks the output against a table of expectations.
+
+- **`/__check`**: PASS/FAIL for every claim; each FAIL shows the CSS text that was expected but missing.
+- **`/__css`**: the generated CSS, pretty and minified.
+- **`/__report`**: the lint and size report.
+- **`/`**: a page where every feature is on screen, with a caption saying what it should look like, plus buttons that toggle theme packs.
+- **`cargo test`**: the same checks as one test.
+
+Each row of the claims table is `(label, expected text, must be present)`. Whitespace is removed from both sides before comparing, so pretty vs minified output doesn't matter. To test a new feature, write a style that uses it and add one row. To test a compile error, paste the bad line into a scratch style and read the message (errors stop the build, so they can't be runtime checks).
+
+---
+
+## 34. Cookbook
+
+**Add a token.** Add the leaf to the `contract!`, then to every `tokens!` set. It's published as `--group-name` automatically (via `vars:`) and usable as `var(set.group.name)`.
+
+**Add a theme.** Add a `theme_pack!` with only the values that change. List it in `theme!` outside the layers. Switch with a class on `<html>`:
+
+```js
+document.documentElement.classList.add('theme-ember');
+```
+
+**A responsive component with shared breakpoints.**
+
+```rust
+contract!(Bp { bp { mobile tablet } });
+tokens! { bps: Bp { bp { mobile: "(max-width: 599px)", tablet: "(max-width: 1023px)" } } }
+style!(card { padding: 16px; @media bps.bp.mobile { padding: 8px } });
+```
+
+**Fallback values.** `position: first-that-works(sticky, -webkit-sticky, fixed);`
+
+**A reset that respects reduced motion.**
+
+```rust
+global! {
+    * { box-sizing: border-box; }
+    @media "(prefers-reduced-motion: reduce)" { * { animation-duration: 0.001ms !important; } }
+}
+```
+
+**Per-element data.** `style!(badge { background: var(--badge-color, gray); })` plus `.css_var("badge_color", …)`, and list `badge_color` under `external_vars:`.
+
+**Find out whether CSS size matters.** Open `/__report`. If the top repeated declaration is a transition used 40 times, make it a token; if duplicate blocks are large, consider a pass that groups them. Don't optimize before measuring.
+
+**Debug a rule.** Open `/__css` in dev: each style is preceded by a `/* file:line · name */` comment pointing at the macro call.
+
+---
+
+## 35. Roadmap
+
+Not built yet:
+1. Typed per-instance inputs (`.css_var(Badge::COLOR, …)` instead of a string name).
+2. Shorthand/longhand ordering lint (`padding` after `padding-top`).
+3. "Shapes": `extends: square_card` so shared view functions accept only compatible styles.
+4. Per-page CSS bundles with content-hashed URLs.
+5. Parametrized mixins.
+6. Multi-pass CSS dedup (grouping identical blocks), only if the report shows it matters.

@@ -1,4 +1,4 @@
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct Style {
     pub name: String,
     pub uses: Vec<String>,
@@ -9,15 +9,17 @@ pub struct Style {
     pub raw: Vec<RawRule>,
     pub is_global: bool,
     pub selector_override: Option<String>,
+    /// `file:line` of the macro call, shown as a comment in dev CSS.
+    pub source: Option<&'static str>,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct Declaration {
     pub property: &'static str,
     pub value: String,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct NestedRule {
     pub selector: String,
     pub declarations: Vec<Declaration>,
@@ -26,10 +28,7 @@ pub struct NestedRule {
     pub children: Vec<NestedRule>,
 }
 
-/// A `&suffix{}` block. Can now hold its own nested `.class{}`/`>.class{}`
-/// blocks and `@media{}` at-rules, exactly like NestedRule — this is what
-/// makes `&.selected { .img_box { ... } }` compile to
-/// `.marker.selected .img_box { ... }`.
+/// A `&suffix{}` block. It can hold its own nested `.class{}` blocks and at-rules.
 #[derive(Debug, Clone, Default)]
 pub struct ParentRule {
     pub suffix: String,
@@ -38,24 +37,22 @@ pub struct ParentRule {
     pub at_rules: Vec<AtRule>,
 }
 
-/// Generalized at-rule: kind is "media" | "supports" | "container".
-/// Same shape for all three — the query string and declarations
-/// work identically, only the `@` keyword differs.
-#[derive(Debug, Clone)]
+/// kind is "media" | "supports" | "container"; the query may come from a token constant.
+#[derive(Debug, Clone, Default)]
 pub struct AtRule {
     pub kind: String,
     pub query: String,
     pub declarations: Vec<Declaration>,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct RawRule {
     pub selector: String,
     pub declarations: Vec<Declaration>,
     pub at_rules: Vec<AtRule>,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct Keyframes {
     pub name: String,
     pub stops: Vec<(String, Vec<Declaration>)>,
