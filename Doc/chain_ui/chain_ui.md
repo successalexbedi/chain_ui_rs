@@ -1,6 +1,6 @@
-# Chain UI + Chain UI Style — Complete Reference
+# Chain UI + Chain UI Style: Complete Reference
 
-A single, exhaustive document covering `chain_ui_core` (the streaming HTML engine) and `chain_ui_style` (the compile-time CSS engine): what they are, how to bring them into a project, every syntax form each macro accepts, every public method and tag, how the two crates connect, how to read their errors, and the real gotchas found while building Fictreon on top of them.
+A single, exhaustive document covering the streaming HTML engine (core) and the compile-time CSS engine (style): what they are, how to bring them into a project, every syntax form each macro accepts, every public method and tag, how the two layers connect, how to read their errors, and the real gotchas found while building Fictreon on top of them. Both layers ship through one crate, `chain_ui`.
 
 Legend: ✅ built and covered by the lab · 🧪 built, verify with the lab · 🛣️ roadmap.
 
@@ -22,7 +22,7 @@ Legend: ✅ built and covered by the lab · 🧪 built, verify with the lab · �
 12. [Context / Scoped State](#12-context--scoped-state)
 13. [Native Browser Helpers](#13-native-browser-helpers)
 14. [Error Messages & Guardrails](#14-error-messages--guardrails)
-15. [chain_ui_style: Introduction](#15-chain_ui_style-introduction)
+15. [Chain UI Style: Introduction](#15-chain-ui-style-introduction)
 16. [`style!` — Full Syntax Reference](#16-style--full-syntax-reference)
 17. [Selectors & Nesting (Including Arbitrary Depth)](#17-selectors--nesting-including-arbitrary-depth)
 18. [`@media` / `@supports` / `@container`](#18-media--supports--container)
@@ -48,11 +48,11 @@ Legend: ✅ built and covered by the lab · 🧪 built, verify with the lab · �
 
 ## 1. What This Is
 
-**`chain_ui_core`** is a streaming HTML engine written in Rust. Instead of building a DOM-like tree in memory and serializing it afterward, every method call writes directly into a growable buffer. There is no intermediate tree, no second serialization pass, and — for the common case — no heap allocation at all (`StreamBuf` stays on the stack until it exceeds 64 bytes). Performance has been validated at 13,550+ pages/sec in real benchmarks.
+**Core** is a streaming HTML engine written in Rust. Instead of building a DOM-like tree in memory and serializing it afterward, every method call writes directly into a growable buffer. There is no intermediate tree, no second serialization pass, and, for the common case, no heap allocation at all (`StreamBuf` stays on the stack until it exceeds 64 bytes). Performance has been validated at 13,550+ pages/sec in real benchmarks.
 
-**`chain_ui_style`** is a compile-time CSS engine: Sass-level power (composition, nesting, a token system, build-time values) made native to `cargo build`, with zero runtime footprint and zero external toolchain. Nothing in this crate generates or mutates CSS client-side, ever. It reads like CSS (`font-size: 16px;`, `--my-var: 1;`, `-webkit-x: y;`), and everything stays inside Rust's own compile step: type-checked token access, real Rust values reaching your CSS through `${...}` interpolation, readable compile errors that point at the exact token, one `cargo build` instead of two toolchains.
+**Style** is a compile-time CSS engine: Sass-level power (composition, nesting, a token system, build-time values) made native to `cargo build`, with zero runtime footprint and zero external toolchain. Nothing in it generates or mutates CSS client-side, ever. It reads like CSS (`font-size: 16px;`, `--my-var: 1;`, `-webkit-x: y;`), and everything stays inside Rust's own compile step: type-checked token access, real Rust values reaching your CSS through `${...}` interpolation, readable compile errors that point at the exact token, one `cargo build` instead of two toolchains.
 
-They are two separate crates with a strict one-way dependency: `chain_ui_style` depends on `chain_ui_core`, never the reverse. `chain_ui_core` has no idea styling exists; it exposes exactly one trait (`ClassMarker`, §25) for styling crates to hook into.
+They are two layers with a strict one-way dependency: style depends on core, never the reverse. Core has no idea styling exists; it exposes exactly one trait (`ClassMarker`, §25) for the style layer to hook into. You never depend on the layers separately: the style crate is published as **`chain_ui`** and re-exports all of core, so one dependency and one import give you both.
 
 Use these when you're rendering server-side HTML at high volume, want compile-time typo protection on tag names and CSS without inventing a template language, and want plain Rust control flow (`if`, `for`, `match`) to *be* your templating logic instead of a separate DSL.
 
@@ -60,49 +60,90 @@ Use these when you're rendering server-side HTML at high volume, want compile-ti
 
 ## 2. Installing / Importing Into a Project
 
-### As individual crates (workspace-local)
+### One dependency
 
 ```toml
 [dependencies]
-chain_ui_core = { path = "../chain_ui_core" }
-chain_ui_style = { path = "../chain_ui_style" }
-```
-
-### As a published dependency
-
-Once published, a consuming project depends on the facade crate `chainui_rs`, which re-exports both:
-
-```toml
-[dependencies]
-chainui_rs = "0.1"
+chain_ui = { path = "../chain_ui_rs/style", features = ["unpoly"] }
 axum = "0.7"
 tokio = { version = "1", features = ["full"] }
 ```
 
+Features (all optional, off by default): `unpoly`, `htmx`, `alphine`. Add only `chain_ui`. Never add `chain_ui_core` or the macro crates next to it: generated code points at `::chain_ui::…`, so `chain_ui` must be the dependency your project names.
+
+Once published, the same line is `chain_ui = { version = "0.1", features = ["unpoly"] }`.
+
+### Imports
+
 ```rust
-use chainui_rs::prelude::*;   // Element, tag::, chain_fmt!, raw_html, style macros…
+use chain_ui::prelude::*;            // core prelude + style macros: Element, tag::, chain_fmt!, raw_html,
+                                     // style! theme! tokens! contract! global! keyframes! sprinkles! theme_pack!,
+                                     // StyleDef, render_theme
+
+use chain_ui::htmx::prelude::*;      // feature "htmx":   ChainAction, ChainExt, Swap, get/post/put/patch/delete,
+                                     //                   htmx_cdn, htmx_cdn_pinned, hx_page!, hx_page_with_user!,
+                                     //                   hx_page_with_optional_user!
+use chain_ui::unpoly::prelude::*;    // feature "unpoly": up_page! and the rest of the unpoly prelude
+use chain_ui::alphine;               // feature "alphine"
 ```
 
-`chainui_rs::core` and `chainui_rs::style` are also available as explicit module paths for anything not in the prelude (e.g. `chainui_rs::style::render::minify`, `chainui_rs::style::theme_pack!`).
+Everything else is reachable by path from the one crate root:
+
+```rust
+use chain_ui::{Element, VoidElement, IntoStream, ChainStr, raw_html, PageShell, ClassMarker};
+use chain_ui::{tag, svg};
+use chain_ui::{cache, context, scope, stream, strings, tags, shell, element, panic};   // core modules
+use chain_ui::{ast, completion, registry, render, report};                             // style internals
+use chain_ui::render::minify;
+```
+
+Macros defined with `#[macro_export]` (`up_page!`, `hx_page!`, `chain_fmt!`, …) live at the crate root regardless of which module defines them, so `chain_ui::up_page!` always works.
+
+An `use` at the top of a file does **not** carry into inner `mod { … }` blocks. Each inner module that calls `style!`, `tokens!` and friends needs its own `use chain_ui::prelude::*;`.
+
+### Repository layout
+
+```
+chain_ui_rs/
+├── Cargo.toml                workspace (members: core, core/macros, style, style/macros)
+├── core/                     package chain_ui_core (internal)
+│   ├── Cargo.toml            features: htmx, unpoly, alphine
+│   ├── macros/               package chain_ui_macros   (#[context])
+│   └── src/
+│       ├── lib.rs, prelude.rs, element.rs, tags.rs, stream.rs, ...
+│       ├── htmx/             feature "htmx"
+│       ├── unpoly/           feature "unpoly"
+│       └── alphine/          feature "alphine"
+└── style/                    package chain_ui  <- the one apps depend on
+    ├── Cargo.toml            forwards the features to core
+    ├── macros/               package chain_ui_style_macros
+    ├── examples/test.rs      the lab (§33)
+    └── src/                  ast, registry, render, report, completion, lib.rs
+```
+
+The folder is `style/`, the package is `chain_ui`. They differ on purpose.
+
+### Optional integrations
+
+`htmx`, `unpoly` and `alphine` are modules inside core, compiled only when their feature is on. `hx_page!` and `up_page!` wrap a page function's result in your app's shell: they look for a type named `AppShell` at **your crate root** that implements `chain_ui::PageShell`. The htmx `_with_user` variants also expect `AuthedUser` at your crate root. Unpoly's `up_page!` detects the `X-Up-Target` header: a targeted request gets the bare fragment, a full request gets the shell.
 
 ### Publishing your own multi-crate workspace as one thing
 
-crates.io has no concept of "workspace" — every crate publishes individually. To give *users* a single dependency line anyway:
+crates.io has no concept of "workspace": every crate publishes individually. To give *users* a single dependency line anyway:
 
 1. Every crate needs `description` and `license` set (inherit from `[workspace.package]`).
-2. Every internal dependency needs both `path` *and* `version` — `path` is stripped at publish time:
+2. Every internal dependency needs both `path` *and* `version`; `path` is stripped at publish time:
    ```toml
-   chain_ui_core = { path = "../chain_ui_core", version = "0.1.0" }
+   chain_ui_core = { path = "core", version = "0.1.0" }
    ```
 3. Login once: `cargo login`, paste your crates.io token.
 4. Dry-run every crate: `cargo publish --dry-run`.
-5. Publish in dependency order, waiting 30–60s between each:
+5. Publish in dependency order, waiting 30–60s between each. A crate can only be published after everything it depends on:
    ```bash
-   cd chain_ui_macros && cargo publish
-   cd ../chain_ui_style_macros && cargo publish
-   cd ../chain_ui_core && cargo publish
-   cd ../chain_ui_style && cargo publish
-   cd ../chainui_rs && cargo publish
+   cd core/macros && cargo publish
+   cd ../ && cargo publish                  # chain_ui_core
+   cd ../style/macros && cargo publish      # chain_ui_style_macros
+   cd ../ && cargo publish                  # chain_ui
    ```
 6. Versions are **immutable**. Bump and re-publish for any change.
 
@@ -113,7 +154,7 @@ crates.io has no concept of "workspace" — every crate publishes individually. 
 Core only:
 
 ```rust
-use chain_ui_core::prelude::*;
+use chain_ui::prelude::*;
 
 fn main() {
     let page = tag::div().class("greeting").child("hi").build();
@@ -124,9 +165,9 @@ fn main() {
 Core + style, written the way CSS reads:
 
 ```rust
-use chainui_rs::prelude::*;
+use chain_ui::prelude::*;
 
-chainui_rs::style::style!(book_card {
+style!(book_card {
     display: flex;
     gap: 12px;
     padding: 16px;
@@ -138,7 +179,7 @@ chainui_rs::style::style!(book_card {
     @media "(max-width: 600px)" { padding: 8px }   // last `;` may be omitted
 });
 
-chainui_rs::style::theme!("app" { book_card; });   // the table of contents
+theme!("app" { book_card; });   // the table of contents
 
 fn card() -> Element {
     tag::div().style::<BookCard>().child("a book")
@@ -157,7 +198,7 @@ fn page() -> Element {
 
 ## 4. Core Concept: Streaming, Not Tree-Building
 
-Every `Element`/`VoidElement` writes into a `StreamBuf` — 64 bytes inline, spilling to the heap only past that. There is no structured tree you can walk, diff, or mutate after the fact; once a byte lands in the buffer, it's not coming back out as structured data. This is a deliberate trade: real time-to-render throughput in exchange for giving up the ability to inspect/mutate a built tree.
+Every `Element`/`VoidElement` writes into a `StreamBuf`: 64 bytes inline, spilling to the heap only past that. There is no structured tree you can walk, diff, or mutate after the fact; once a byte lands in the buffer, it's not coming back out as structured data. This is a deliberate trade: real time-to-render throughput in exchange for giving up the ability to inspect/mutate a built tree.
 
 Concretely: `Element::new("div")` immediately writes `<div` into its buffer. `.class("x")` writes ` class="x"` and closes the quote. `.child(...)` closes the opening tag's `>` and appends whatever you passed. `.build()` writes the closing tag and hands you the finished string.
 
@@ -165,7 +206,7 @@ Concretely: `Element::new("div")` immediately writes `<div` into its buffer. `.c
 
 ## 5. Elements & Tags
 
-Two concrete types back every tag: `Element` (can hold children) and `VoidElement` (self-closing — `<img>`, `<input>`, `<br>`). Both are **plain structs, never generic typestate** — a function can return `Element` regardless of how many attributes or children it ends up with. That's what makes `Vec<Element>`, passing elements across function boundaries, and conditional construction just work.
+Two concrete types back every tag: `Element` (can hold children) and `VoidElement` (self-closing: `<img>`, `<input>`, `<br>`). Both are **plain structs, never generic typestate**, so a function can return `Element` regardless of how many attributes or children it ends up with. That's what makes `Vec<Element>`, passing elements across function boundaries, and conditional construction just work.
 
 ```rust
 tag::div()                 // -> Element
@@ -248,14 +289,14 @@ error: <div>
 | `.class(name)` | `impl Into<ChainStr>` | Merges into an existing `class="…"` if called again. Zero-allocation for the common multi-class case. |
 | `.class_if(cond, name)` | | `.class()` only if `cond` |
 | `.classes_if(iter)` | `IntoIterator<Item = (bool, S)>` | Batch conditional classes |
-| `.attr(key, value)` | `impl Into<ChainStr>` ×2 | Raw attribute. **Does not merge** — a repeated key writes a duplicate the HTML parser silently drops. Only `.class()` and `.style_attr()` merge. |
+| `.attr(key, value)` | `impl Into<ChainStr>` ×2 | Raw attribute. **Does not merge**: a repeated key writes a duplicate the HTML parser silently drops. Only `.class()` and `.style_attr()` merge. |
 | `.attr_if(cond, key, value)` | | Conditional `.attr()` |
 | `.id(id)` | | `.attr("id", id)` |
 | `.src` `.href` `.alt` `.name` `.value` `.placeholder` `.type_` | | Shorthands over `.attr()` |
 | `.flag(cond, key)` | | Boolean attribute: present with no value, or absent |
 | `.disabled` `.required` `.readonly` `.checked` | | `.flag()` shorthands |
 | `.style_attr(css)` | `impl Into<ChainStr>` | Raw `style="…"`. **Merges** across repeated calls. |
-| `.style::<M: ClassMarker>()` | | `.class(M::NAME)` — applies a `style!` block's class (§25/§26) |
+| `.style::<M: ClassMarker>()` | | `.class(M::NAME)`: applies a `style!` block's class (§25/§26) |
 | `.css_var(name, value)` | `&str, impl Display` | Writes `--{kebab-name}: {value};` into the merging style attribute |
 | `.css_vars(&[(name, &dyn Display)])` | | Several custom properties in one call, one merged attribute |
 | `.modify(f)` | `FnOnce(Self) -> Self` | Escape hatch: run logic mid-chain without breaking the chain |
@@ -272,8 +313,8 @@ All of these are implemented once via `impl_attr_methods!` and apply to both `El
 |---|---|
 | `&str` / `String` / `&String` / `ChainStr` | HTML-escaped text |
 | `Element` / `VoidElement` | Nested into the parent's buffer |
-| `Option<T: IntoStream>` | `Some` renders, `None` renders nothing — **your `if`** |
-| `Vec<T: IntoStream>` | Each item in order — **your `for`** (`iter().map(…).collect::<Vec<_>>()`) |
+| `Option<T: IntoStream>` | `Some` renders, `None` renders nothing: **your `if`** |
+| `Vec<T: IntoStream>` | Each item in order: **your `for`** (`iter().map(…).collect::<Vec<_>>()`) |
 | Tuples `(A, B, …)` up to 6 | Each in order |
 | `()` | Nothing |
 | A closure `\|\| { … }` | Elements built inside attach themselves on drop |
@@ -312,9 +353,9 @@ No `.child_if()` / `.child_for()` exist by design: plain Rust does the same.
 
 | Variant | When |
 |---|---|
-| `ChainStr::Static(&'static str)` | String literals — zero cost |
+| `ChainStr::Static(&'static str)` | String literals: zero cost |
 | `ChainStr::Owned(Arc<str>)` | Owned dynamic text |
-| `ChainStr::Inline { buf: [u8; 48], len }` | Short results of `chain_fmt!` — no heap allocation |
+| `ChainStr::Inline { buf: [u8; 48], len }` | Short results of `chain_fmt!`: no heap allocation |
 
 `chain_fmt!` is a drop-in `format!` that uses a 48-byte stack buffer and falls back to a `String` on overflow:
 
@@ -359,7 +400,7 @@ Neither is public. You opt out only through `raw_html()`: there is no half-safe 
 
 ## 11. Caching
 
-`chain_ui_core::cache` is a bounded (2048-entry), **thread-local** LRU for pre-rendered fragments, with O(1) operations and an `FxHasher`.
+`chain_ui::cache` is a bounded (2048-entry), **thread-local** LRU for pre-rendered fragments, with O(1) operations and an `FxHasher`.
 
 | Function | Signature | Behavior |
 |---|---|---|
@@ -369,13 +410,13 @@ Neither is public. You opt out only through `raw_html()`: there is no half-safe 
 | `clear_local_cache()` | | Empties this thread's cache |
 | `cache_len()` | → `usize` | Entry count |
 
-Not global — each thread has its own cache.
+Not global: each thread has its own cache.
 
 ---
 
 ## 12. Context / Scoped State
 
-`#[context(...)]` (from `chain_ui_macros`, re-exported by core) generates request-scoped state without prop-drilling.
+`#[context(...)]` (defined in `chain_ui_macros`, re-exported through `chain_ui`) generates request-scoped state without prop-drilling.
 
 ```rust
 #[context(current_user, User)]
@@ -414,13 +455,13 @@ All return a plain `Element`/`VoidElement`.
 
 There are two families of errors, and they behave differently.
 
-**Runtime guardrails (chain_ui_core).** Every panic routes through `chain_panic!`, which prints a colored, word-wrapped message in a terminal and a plain `[CHAIN UI ERROR] in {target}: {msg}` otherwise:
+**Runtime guardrails (core).** Every panic routes through `chain_panic!`, which prints a colored, word-wrapped message in a terminal and a plain `[CHAIN UI ERROR] in {target}: {msg}` otherwise:
 - attribute after child (exact call site, via `#[track_caller]`)
 - unknown tag name (debug builds, Levenshtein-matched)
 - orphaned element (debug builds)
 - missing context (names the type and setter)
 
-**Compile-time diagnostics (chain_ui_style).** Every style/theme/token error is a `compile_error!` anchored on the exact token you wrote, with a title, `note`, `help` and often an `example`. One build reports every error, not just the first. Details and a catalog of messages are in §31.
+**Compile-time diagnostics (style).** Every style/theme/token error is a `compile_error!` anchored on the exact token you wrote, with a title, `note`, `help` and often an `example`. One build reports every error, not just the first. Details and a catalog of messages are in §31.
 
 ```
 error: chain_ui_style: `flx` is not a valid value for `display`
@@ -434,7 +475,7 @@ error: chain_ui_style: `flx` is not a valid value for `display`
 
 ---
 
-## 15. chain_ui_style: Introduction
+## 15. Chain UI Style: Introduction
 
 The pipeline, kept as separate layers:
 
@@ -452,12 +493,12 @@ style!/tokens!/global!/keyframes!/theme_pack!                    │
 ```
 
 Non-negotiable rules:
-- No async and no DB/HTTP knowledge inside `style!` — data arrives pre-resolved via `${…}`.
-- No per-instance classes — dynamic data always goes through CSS custom properties (`.css_var()`).
-- AST-first, CSS-string-last — the renderer is the only string-producing layer.
-- Deterministic ordering — fixed pipeline order, never hash-map iteration order.
-- Zero runtime — nothing generates or mutates CSS client-side, ever.
-- Open-world — an unknown property or keyword is allowed unless it looks like a typo of a known one.
+- No async and no DB/HTTP knowledge inside `style!`: data arrives pre-resolved via `${…}`.
+- No per-instance classes: dynamic data always goes through CSS custom properties (`.css_var()`).
+- AST-first, CSS-string-last: the renderer is the only string-producing layer.
+- Deterministic ordering: fixed pipeline order, never hash-map iteration order.
+- Zero runtime: nothing generates or mutates CSS client-side, ever.
+- Open-world: an unknown property or keyword is allowed unless it looks like a typo of a known one.
 
 ---
 
@@ -472,7 +513,7 @@ style!(marker_name {
 
 or the string form `style!("marker_name" { … })`. The name becomes a Rust type name and a CSS class, so it must be letters, digits and underscores.
 
-- **`compose:`** — comma-separated style names merged in first. Later styles, and the block itself, override earlier same-property declarations (last write wins, first-seen order kept). A cycle or an unknown name panics at startup (§14), with a did-you-mean.
+- **`compose:`**: comma-separated style names merged in first. Later styles, and the block itself, override earlier same-property declarations (last write wins, first-seen order kept). A cycle or an unknown name panics at startup (§14), with a did-you-mean.
 - **Duplicate property in one block** is a compile error. `font-size` and `font_size` count as the same property.
 - **Marker naming:** `book_card` → `BookCard`.
 - **The last declaration in a block may omit its `;`**, like CSS. Every other one needs it, and a missing one is reported where it happens (§31).
@@ -562,7 +603,7 @@ style!(card {
 
 Rules that catch people:
 - `&` blocks may hold nested `.class { }` and at-rules, but **not another `&`**. Write `&.a.b { }`, not `&.a { &.b { } }`.
-- At-rule bodies hold **declarations only** — never selectors. The at-rule applies to the enclosing selector.
+- At-rule bodies hold **declarations only**, never selectors. The at-rule applies to the enclosing selector.
 - Comma-grouped rules (`.a, .b { }`) aren't grammar inside `style!`. Use `compose:`, or a `selector` block when you need a list.
 - Use `selector` for ancestor-gated combinations such as `.split.section_mode .panel`, where the state lives on an ancestor.
 - `compose`, `selector`, `variant` and `compound` are top-level-only; using them in a nested block is an error that says so.
@@ -777,23 +818,23 @@ The table's lookup key is kebab-case, so `justify_content` is checked as `justif
 ## 25. The `ClassMarker` Bridge
 
 ```rust
-// owned by chain_ui_core
+// owned by core
 pub trait ClassMarker { const NAME: &'static str; }
 ```
 
-This is the **entire** surface `chain_ui_core` exposes for styling integration. It exists because of the one-way dependency: `chain_ui_style` depends on core, so core can never depend back, yet `.style::<Marker>()` needs a type both sides can use.
+This is the **entire** surface core exposes for styling integration. It exists because of the one-way dependency: style depends on core, so core can never depend back, yet `.style::<Marker>()` needs a type both sides can use.
 
-`chain_ui_style`'s `StyleDef` builds on it:
+The style layer's `StyleDef` builds on it:
 
 ```rust
-pub trait StyleDef: chain_ui_core::ClassMarker { fn build() -> crate::ast::Style; }
+pub trait StyleDef: ClassMarker { fn build() -> crate::ast::Style; }
 ```
 
 `style!(book_card { … })` expands to a marker struct plus two `impl`s, one per trait. You can implement `ClassMarker` by hand for a class that has no `style!` behind it:
 
 ```rust
 struct Highlighted;
-impl chain_ui_core::ClassMarker for Highlighted { const NAME: &'static str = "highlighted"; }
+impl chain_ui::ClassMarker for Highlighted { const NAME: &'static str = "highlighted"; }
 tag::div().style::<Highlighted>().child("hi")
 ```
 
@@ -832,13 +873,13 @@ If a variable is only ever set this way, list it under `external_vars:` in `them
 Both places that hand CSS to core use `raw_html()`:
 
 ```rust
-// chain_ui_style::render::render_theme
+// chain_ui::render::render_theme
 pub fn render_theme(styles: Vec<Style>) -> Element {
-    tag::style().child(chain_ui_core::raw_html(render_css(styles)))
+    tag::style().child(chain_ui::raw_html(render_css(styles)))
 }
 // generated by theme!
-pub fn app_theme() -> chain_ui_core::Element {
-    chain_ui_core::tag::style().child(chain_ui_core::raw_html(app_css()))
+pub fn app_theme() -> ::chain_ui::Element {
+    ::chain_ui::tag::style().child(::chain_ui::raw_html(app_css()))
 }
 ```
 
@@ -919,6 +960,9 @@ theme!("fictreon" {
 - **`.attr("style", …)` doesn't merge.** Use `.style_attr()` or `.css_var()`, which write one merged attribute.
 - **There is no `.render()` method on `Element`.** Inside a `.child(|| { … })` loop, let built elements drop.
 - **`theme!` requires every listed name in scope.** A missing `use` fails at the `theme!` line as "cannot find type". Check imports first. If a `style!` itself had an error, fix that one first: the type is still emitted, so you'll see only the real error.
+- **Inner modules need their own `use chain_ui::prelude::*;`.** A `use` at the top of the file doesn't reach inside `mod { … }`, and the symptom is "cannot find macro `style`".
+- **Depend on `chain_ui` only.** Generated code points at `::chain_ui::…`; adding `chain_ui_core` or a macro crate directly invites mismatched paths.
+- **`up_page!` / `hx_page!` need `AppShell` at your crate root** (implementing `chain_ui::PageShell`). The htmx `_with_user` variants also need `AuthedUser` there.
 - **`tokens!` leaf values must be quoted strings**, even for `16px`.
 - **Hex colors must be quoted** in `style!` (`"#1e1e1e"`). Rust's tokenizer reads `#1e1e1e` as a number.
 - **`@media "…"` is not allowed directly inside `global!` selectors' bodies**, but it is allowed as a *wrapper* around selector blocks (§20).
@@ -936,7 +980,7 @@ theme!("fictreon" {
 
 ## 30. Full API Appendix
 
-### chain_ui_core
+### Core (all reachable from `chain_ui`)
 
 | Item | Signature (abridged) |
 |---|---|
@@ -959,7 +1003,17 @@ theme!("fictreon" {
 | `PageShell` | `fn wrap(title: &str, content: Element) -> Element` |
 | `ClassMarker` | `const NAME: &'static str` |
 
-### chain_ui_style macros
+### Integrations (feature-gated, under `chain_ui::`)
+
+| Item | Feature | Notes |
+|---|---|---|
+| `htmx::prelude::*` | `htmx` | `ChainAction`, `ChainExt`, `Swap`, `get/post/put/patch/delete`, `htmx_cdn`, `htmx_cdn_pinned` |
+| `hx_page!` `hx_page_with_user!` `hx_page_with_optional_user!` | `htmx` | at the crate root; need `AppShell` (and `AuthedUser` for the user variants) in your crate root |
+| `unpoly::prelude::*` | `unpoly` | includes `up_page!` |
+| `up_page!` | `unpoly` | at the crate root; wraps in `AppShell` unless the request carries `X-Up-Target` |
+| `alphine` | `alphine` | module path |
+
+### Style macros
 
 | Macro | Signature | Generates |
 |---|---|---|
@@ -972,7 +1026,7 @@ theme!("fictreon" {
 | `theme!` | `theme!("x" { layers: …; external_vars: …; layer l { … } name; global; vars: set; keyframes: …; })` | `x_css()`, `x_theme()`, `x_css_version()`, `x_report()` |
 | `sprinkles!` | `sprinkles!(set { prop: group { key, key }; })` | one style per `(prop, key)` |
 
-### chain_ui_style runtime
+### Style runtime
 
 | Item | Notes |
 |---|---|
@@ -1040,7 +1094,7 @@ Inside a `style!` body, rust-analyzer can complete:
 
 It does **not** complete class names after `.`, `compose:` targets, or the `theme!` list.
 
-How it works: when rust-analyzer asks for completions it inserts a marker word at the cursor and re-expands the macro. The macro then emits a hidden reference into the generated `chain_ui_style::completion::{props, values}` lists behind `#[cfg(rust_analyzer)]`, so `cargo build` never sees it. Type underscore forms (`inline_flex`); the engine treats `_` and `-` the same in bare words.
+How it works: when rust-analyzer asks for completions it inserts a marker word at the cursor and re-expands the macro. The macro then emits a hidden reference into the generated `chain_ui::completion::{props, values}` lists behind `#[cfg(rust_analyzer)]`, so `cargo build` never sees it. Type underscore forms (`inline_flex`); the engine treats `_` and `-` the same in bare words.
 
 Setup check:
 1. Rebuild once so rust-analyzer loads the new macro.
@@ -1053,13 +1107,17 @@ If your editor doesn't run rust-analyzer, no macro can add completion there. Use
 
 ## 33. The Lab: Testing the Engine
 
-The lab is a small binary (`main.rs` in a test crate) that defines styles using every feature, builds the CSS, and checks the output against a table of expectations.
+The lab is a small binary (`style/examples/test.rs`) that defines styles using every feature, builds the CSS, and checks the output against a table of expectations.
+
+```sh
+cargo run  -p chain_ui --example test    # starts the lab on http://127.0.0.1:4000
+cargo test -p chain_ui --example test    # the same checks as one test
+```
 
 - **`/__check`**: PASS/FAIL for every claim; each FAIL shows the CSS text that was expected but missing.
 - **`/__css`**: the generated CSS, pretty and minified.
 - **`/__report`**: the lint and size report.
 - **`/`**: a page where every feature is on screen, with a caption saying what it should look like, plus buttons that toggle theme packs.
-- **`cargo test`**: the same checks as one test.
 
 Each row of the claims table is `(label, expected text, must be present)`. Whitespace is removed from both sides before comparing, so pretty vs minified output doesn't matter. To test a new feature, write a style that uses it and add one row. To test a compile error, paste the bad line into a scratch style and read the message (errors stop the build, so they can't be runtime checks).
 
@@ -1111,3 +1169,4 @@ Not built yet:
 4. Per-page CSS bundles with content-hashed URLs.
 5. Parametrized mixins.
 6. Multi-pass CSS dedup (grouping identical blocks), only if the report shows it matters.
+
