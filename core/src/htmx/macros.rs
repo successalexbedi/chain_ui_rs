@@ -6,7 +6,7 @@ macro_rules! hx_page {
             let html = if headers.contains_key("HX-Request") {
                 ($crate::tag::title().child(title), content).build()
             } else {
-                <crate::AppShell as $crate::htmx::PageShell>::wrap(title, content).build()
+                <crate::AppShell as $crate::PageShell>::wrap(title, content).build()
             };
             ::axum::response::Html(html.into_string())
         }
@@ -25,7 +25,7 @@ macro_rules! hx_page_with_optional_user {
             let html = if headers.contains_key("HX-Request") {
                 ($crate::tag::title().child(title), content).build()
             } else {
-                <crate::AppShell as $crate::htmx::PageShell>::wrap(title, content).build()
+                <crate::AppShell as $crate::PageShell>::wrap(title, content).build()
             };
             ::axum::response::Html(html.into_string())
         }
@@ -43,7 +43,7 @@ macro_rules! hx_page_with_user {
             let html = if headers.contains_key("HX-Request") {
                 ($crate::tag::title().child(title), content).build()
             } else {
-                <crate::AppShell as $crate::htmx::PageShell>::wrap(title, content).build()
+                <crate::AppShell as $crate::PageShell>::wrap(title, content).build()
             };
             ::axum::response::Html(html.into_string())
         }

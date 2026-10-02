@@ -38,7 +38,7 @@ pub fn expand(input: TokenStream) -> R<TokenStream> {
     let decls = leaves.iter().map(|l| {
         let prop = format!("--{}", l.path.iter().map(|(n, _)| n.replace('_', "-")).collect::<Vec<_>>().join("-"));
         let v = &l.value;
-        quote! { chain_ui_style::ast::Declaration { property: #prop, value: #v.to_string() } }
+        quote! { ::chain_ui::ast::Declaration { property: #prop, value: #v.to_string() } }
     });
     let checks = leaves.iter().filter_map(|l| {
         let flat = l.path.iter().map(|(n, _)| n.as_str()).collect::<Vec<_>>().join("_");
@@ -51,13 +51,13 @@ pub fn expand(input: TokenStream) -> R<TokenStream> {
         #[allow(non_camel_case_types)]
         pub struct #marker;
 
-        impl chain_ui_core::ClassMarker for #marker {
+        impl ::chain_ui::ClassMarker for #marker {
             const NAME: &'static str = #pack_name;
         }
 
-        impl chain_ui_style::registry::StyleDef for #marker {
-            fn build() -> chain_ui_style::ast::Style {
-                chain_ui_style::ast::Style {
+        impl ::chain_ui::registry::StyleDef for #marker {
+            fn build() -> ::chain_ui::ast::Style {
+                ::chain_ui::ast::Style {
                     name: #pack_name.into(),
                     declarations: vec![ #(#decls),* ],
                     is_global: true,

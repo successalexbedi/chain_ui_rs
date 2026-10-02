@@ -1,3 +1,5 @@
+extern crate self as chain_ui;
+
 // lib.rs
 
 mod attrs; // impl-only: adds methods to Element/VoidElement, nothing to export
@@ -30,4 +32,3 @@ pub mod prelude;
 #[cfg(feature = "alphine")] pub mod alphine;
 #[cfg(feature = "htmx")] pub mod htmx;
 #[cfg(feature = "unpoly")] pub mod unpoly;
-pub use chain_ui_macros::*;

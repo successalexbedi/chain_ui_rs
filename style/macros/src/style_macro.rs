@@ -569,7 +569,7 @@ pub(crate) fn parse_declaration(cur: &mut Cursor) -> R<Decl> {
     // completion: `disp|` offers every property
     if diag::completing() && name.text.contains(COMPLETION_MARKER) && !property.starts_with('-') {
         if let Some(id) = diag::ident_tokens(&name.text.replace('-', "_"), name.last) {
-            diag::hint(quote! { let _ = chain_ui_style::completion::props::#id; });
+            diag::hint(quote! { let _ = ::chain_ui::completion::props::#id; });
         }
     }
 
@@ -628,7 +628,7 @@ pub(crate) fn decl_tokens(decls: &[Decl]) -> Vec<TokenStream> {
         .map(|d| {
             let prop = &d.property;
             let value = d.value.to_expr();
-            quote! { chain_ui_style::ast::Declaration { property: #prop, value: #value } }
+            quote! { ::chain_ui::ast::Declaration { property: #prop, value: #value } }
         })
         .collect()
 }
@@ -643,7 +643,7 @@ pub(crate) fn at_rule_tokens(at_rules: &[AtRuleSrc]) -> Vec<TokenStream> {
                 Query::Expr(ts) => quote! { (#ts).to_string() },
             };
             let inner = decl_tokens(&a.decls);
-            quote! { chain_ui_style::ast::AtRule { kind: #kind.into(), query: #query, declarations: vec![ #(#inner),* ] } }
+            quote! { ::chain_ui::ast::AtRule { kind: #kind.into(), query: #query, declarations: vec![ #(#inner),* ] } }
         })
         .collect()
 }
@@ -657,7 +657,7 @@ fn parent_tokens(parent: &[Parent]) -> Vec<TokenStream> {
             let nested = nested_tokens(&p.nested);
             let at = at_rule_tokens(&p.at_rules);
             quote! {
-                chain_ui_style::ast::ParentRule {
+                ::chain_ui::ast::ParentRule {
                     suffix: #suffix.into(),
                     declarations: vec![ #(#inner),* ],
                     nested: vec![ #(#nested),* ],
@@ -678,7 +678,7 @@ fn nested_tokens(nested: &[Nested]) -> Vec<TokenStream> {
             let at = at_rule_tokens(&n.at_rules);
             let children = nested_tokens(&n.children);
             quote! {
-                chain_ui_style::ast::NestedRule {
+                ::chain_ui::ast::NestedRule {
                     selector: #selector.into(),
                     declarations: vec![ #(#inner),* ],
                     parent: vec![ #(#parent),* ],
@@ -696,12 +696,12 @@ fn marker_tokens(name: &str, style_expr: TokenStream) -> TokenStream {
         #[allow(non_camel_case_types)]
         pub struct #marker;
 
-        impl chain_ui_core::ClassMarker for #marker {
+        impl ::chain_ui::ClassMarker for #marker {
             const NAME: &'static str = #name;
         }
 
-        impl chain_ui_style::registry::StyleDef for #marker {
-            fn build() -> chain_ui_style::ast::Style { #style_expr }
+        impl ::chain_ui::registry::StyleDef for #marker {
+            fn build() -> ::chain_ui::ast::Style { #style_expr }
         }
     }
 }
@@ -709,7 +709,7 @@ fn marker_tokens(name: &str, style_expr: TokenStream) -> TokenStream {
 /// Emitted when the style had errors: the type still exists, so one mistake in one
 /// style doesn't turn into dozens of "cannot find type" errors elsewhere.
 fn stub(name: &str) -> TokenStream {
-    marker_tokens(name, quote! { chain_ui_style::ast::Style { name: #name.into(), ..Default::default() } })
+    marker_tokens(name, quote! { ::chain_ui::ast::Style { name: #name.into(), ..Default::default() } })
 }
 
 fn codegen(name: &str, uses: Vec<String>, block: Block, raw: Vec<Raw>) -> TokenStream {
@@ -722,7 +722,7 @@ fn codegen(name: &str, uses: Vec<String>, block: Block, raw: Vec<Raw>) -> TokenS
         let inner = decl_tokens(&r.decls);
         let at = at_rule_tokens(&r.at_rules);
         quote! {
-            chain_ui_style::ast::RawRule {
+            ::chain_ui::ast::RawRule {
                 selector: #selector.into(),
                 declarations: vec![ #(#inner),* ],
                 at_rules: vec![ #(#at),* ],
@@ -733,7 +733,7 @@ fn codegen(name: &str, uses: Vec<String>, block: Block, raw: Vec<Raw>) -> TokenS
     marker_tokens(
         name,
         quote! {
-            chain_ui_style::ast::Style {
+            ::chain_ui::ast::Style {
                 name: #name.into(),
                 uses: vec![ #(#uses_ts),* ],
                 declarations: vec![ #(#decl_ts),* ],

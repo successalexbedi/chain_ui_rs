@@ -28,7 +28,7 @@ pub fn expand(input: TokenStream) -> R<TokenStream> {
         entries.clear();
     }
     Ok(quote! {
-        pub fn __global_styles() -> Vec<chain_ui_style::ast::Style> {
+        pub fn __global_styles() -> Vec<::chain_ui::ast::Style> {
             vec![ #(#entries),* ]
         }
     })
@@ -163,7 +163,7 @@ fn style_tokens(selector: &str, decls: Vec<Decl>, at: Vec<AtRuleSrc>) -> TokenSt
     let decl_ts = decl_tokens(&decls);
     let at_ts = at_rule_tokens(&at);
     quote! {
-        chain_ui_style::ast::Style {
+        ::chain_ui::ast::Style {
             name: #selector.into(),
             declarations: vec![ #(#decl_ts),* ],
             at_rules: vec![ #(#at_ts),* ],

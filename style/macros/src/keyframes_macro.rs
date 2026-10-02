@@ -47,8 +47,8 @@ pub fn expand(input: TokenStream) -> R<TokenStream> {
         quote! { (#label.to_string(), vec![ #(#inner),* ]) }
     });
     Ok(quote! {
-        pub fn #fn_ident() -> chain_ui_style::ast::Keyframes {
-            chain_ui_style::ast::Keyframes { name: #css_name.into(), stops: vec![ #(#stop_ts),* ] }
+        pub fn #fn_ident() -> ::chain_ui::ast::Keyframes {
+            ::chain_ui::ast::Keyframes { name: #css_name.into(), stops: vec![ #(#stop_ts),* ] }
         }
     })
 }

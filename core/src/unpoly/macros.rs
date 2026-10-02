@@ -26,7 +26,7 @@ macro_rules! __up_page_respond {
                         .into_response()
                 } else {
                     let html =
-                        <crate::AppShell as $crate::unpoly::PageShell>::wrap(title.as_str(), content);
+                        <crate::AppShell as $crate::PageShell>::wrap(title.as_str(), content);
                     ::axum::response::Html(html.build().into_string()).into_response()
                 }
             }
@@ -35,7 +35,7 @@ macro_rules! __up_page_respond {
                 let html_string = if is_fragment {
                     err.content.build().into_string()
                 } else {
-                    <crate::AppShell as $crate::unpoly::PageShell>::wrap(err.title.as_str(), err.content)
+                    <crate::AppShell as $crate::PageShell>::wrap(err.title.as_str(), err.content)
                         .build()
                         .into_string()
                 };

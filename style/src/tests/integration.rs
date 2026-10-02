@@ -1,4 +1,4 @@
-use chain_ui_style::{style, theme, tokens};
+use chain_ui::{style, theme, tokens};
 
 tokens! {
     pub colors { surface: "#111", text: "#eee" }

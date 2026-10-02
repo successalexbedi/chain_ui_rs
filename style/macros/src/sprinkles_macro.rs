@@ -37,15 +37,15 @@ pub fn expand(input: TokenStream) -> R<TokenStream> {
                 #[allow(non_camel_case_types)]
                 pub struct #marker;
 
-                impl chain_ui_core::ClassMarker for #marker {
+                impl ::chain_ui::ClassMarker for #marker {
                     const NAME: &'static str = #class_name;
                 }
 
-                impl chain_ui_style::registry::StyleDef for #marker {
-                    fn build() -> chain_ui_style::ast::Style {
-                        chain_ui_style::ast::Style {
+                impl ::chain_ui::registry::StyleDef for #marker {
+                    fn build() -> ::chain_ui::ast::Style {
+                        ::chain_ui::ast::Style {
                             name: #class_name.into(),
-                            declarations: vec![chain_ui_style::ast::Declaration {
+                            declarations: vec![::chain_ui::ast::Declaration {
                                 property: #prop,
                                 value: (#theme_mod::#submodule::#key).to_string(),
                             }],

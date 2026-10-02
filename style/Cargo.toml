@@ -1,5 +1,5 @@
 [package]
-name = "chain_ui_style"
+name = "chain_ui"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
@@ -15,3 +15,9 @@ tokio.workspace = true
 axum.workspace = true
 serde.workspace = true
 serde_json.workspace = true
+
+[features]
+default = []
+unpoly = ["chain_ui_core/unpoly"]
+htmx = ["chain_ui_core/htmx"]
+alphine = ["chain_ui_core/alphine"]

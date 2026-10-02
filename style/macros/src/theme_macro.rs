@@ -61,7 +61,7 @@ pub fn expand(input: TokenStream) -> R<TokenStream> {
     if diag::has_errors() {
         return Ok(quote! {
             pub fn #css_fn() -> &'static str { "" }
-            pub fn #theme_fn() -> chain_ui_core::Element { chain_ui_core::tag::style() }
+            pub fn #theme_fn() -> ::chain_ui::Element { ::chain_ui::tag::style() }
             pub fn #version_fn() -> u64 { 0 }
             pub fn #report_fn() -> String { String::new() }
         });
@@ -76,14 +76,14 @@ pub fn expand(input: TokenStream) -> R<TokenStream> {
         let items = g.items.iter().map(|it| match it {
             Item::Style(name, span) => {
                 let m = diag::ident_tokens(&snake_to_pascal(name), *span).unwrap_or_default();
-                quote! { s.push(<#m as chain_ui_style::registry::StyleDef>::build()); }
+                quote! { s.push(<#m as ::chain_ui::registry::StyleDef>::build()); }
             }
             Item::Global => quote! { s.extend(__global_styles()); },
-            Item::Vars(path) => quote! { s.push(chain_ui_style::registry::root_vars_style(":root", #path::VARS)); },
+            Item::Vars(path) => quote! { s.push(::chain_ui::registry::root_vars_style(":root", #path::VARS)); },
         });
         quote! {
             {
-                let mut s: Vec<chain_ui_style::ast::Style> = Vec::new();
+                let mut s: Vec<::chain_ui::ast::Style> = Vec::new();
                 #(#items)*
                 groups.push((#layer, s));
             }
@@ -98,14 +98,14 @@ pub fn expand(input: TokenStream) -> R<TokenStream> {
     Ok(quote! {
         #[cold]
         fn #build_fn() -> String {
-            let mut groups: Vec<(Option<&'static str>, Vec<chain_ui_style::ast::Style>)> = Vec::new();
+            let mut groups: Vec<(Option<&'static str>, Vec<::chain_ui::ast::Style>)> = Vec::new();
             #(#group_blocks)*
-            let keyframes: Vec<chain_ui_style::ast::Keyframes> = vec![ #(#kf_calls),* ];
-            chain_ui_style::render::render_theme_css(
+            let keyframes: Vec<::chain_ui::ast::Keyframes> = vec![ #(#kf_calls),* ];
+            ::chain_ui::render::render_theme_css(
                 &[ #(#order),* ],
                 groups,
                 keyframes,
-                chain_ui_style::render::RenderOpts {
+                ::chain_ui::render::RenderOpts {
                     comments: cfg!(debug_assertions),
                     minify: !cfg!(debug_assertions),
                 },
@@ -118,20 +118,20 @@ pub fn expand(input: TokenStream) -> R<TokenStream> {
             CSS.get_or_init(#build_fn)
         }
 
-        pub fn #theme_fn() -> chain_ui_core::Element {
-            chain_ui_core::tag::style().child(chain_ui_core::raw_html(#css_fn()))
+        pub fn #theme_fn() -> ::chain_ui::Element {
+            ::chain_ui::tag::style().child(::chain_ui::raw_html(#css_fn()))
         }
 
         /// A number that changes whenever the CSS does: use it as `?v=…` for cache busting.
         #[allow(dead_code)]
         pub fn #version_fn() -> u64 {
-            chain_ui_style::report::fnv1a(#css_fn())
+            ::chain_ui::report::fnv1a(#css_fn())
         }
 
         /// Size, duplication and lint report (unknown `var()`, unused keyframes). Serve it in dev.
         #[allow(dead_code)]
         pub fn #report_fn() -> String {
-            chain_ui_style::report::analyze(#css_fn(), &[ #(#external),* ]).to_text()
+            ::chain_ui::report::analyze(#css_fn(), &[ #(#external),* ]).to_text()
         }
     })
 }

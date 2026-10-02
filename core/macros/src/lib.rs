@@ -94,7 +94,7 @@ fn context_on_fn(attr: TokenStream, mut item_fn: syn::ItemFn) -> TokenStream {
     let new_block: syn::Block = syn::parse_quote! {{
         let (#(#bindings),*) = #static_name
             .try_with(|__ctx| (#(#accesses),*))
-            .unwrap_or_else(|_| ::chain_ui_core::context::context_missing(#ctx_name_str, &#setter_name_str));
+            .unwrap_or_else(|_| ::chain_ui::context::context_missing(#ctx_name_str, &#setter_name_str));
         #block
     }};
     item_fn.block = Box::new(new_block);

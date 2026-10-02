@@ -100,7 +100,7 @@ fn value_hint(cur: &Cursor, property: &str) {
                 diag::ident_tokens(&property.replace('-', "_"), Span::call_site()),
                 diag::ident_tokens(&text, i.span()),
             ) {
-                diag::hint(quote! { let _ = chain_ui_style::completion::values::#m::#v; });
+                diag::hint(quote! { let _ = ::chain_ui::completion::values::#m::#v; });
             }
         }
     }
