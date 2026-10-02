@@ -1,10 +1,12 @@
 use axum::{Router, http::header, response::IntoResponse, routing::get};
 use chain_ui::prelude::*;
+use chain_ui::render::minify;
 
 mod styles {
     pub mod tokens {
-        chain_ui::contract!(ThemeTokens { colors { surface text gold muted } spacing { sm md } radius { sm } });
-        chain_ui::tokens! {
+        use chain_ui::prelude::*;
+        contract!(ThemeTokens { colors { surface text gold muted } spacing { sm md } radius { sm } });
+        tokens! {
             fictreon_dark: ThemeTokens {
                 colors { surface: "#1E1E1E", text: "#F5F3ED", gold: "#C8A45A", muted: "#A8A8A8" }
                 spacing { sm: "8px", md: "16px" }
@@ -13,16 +15,17 @@ mod styles {
         }
 
         // breakpoints as tokens: used as `@media bps.bp.mobile { … }`
-        chain_ui::contract!(Bp { bp { mobile tablet } });
-        chain_ui::tokens! {
+        contract!(Bp { bp { mobile tablet } });
+        tokens! {
             bps: Bp { bp { mobile: "(max-width: 599px)", tablet: "(max-width: 1023px)" } }
         }
     }
 
     /* ---------- regression ---------- */
     pub mod card_base {
+        use chain_ui::prelude::*;
         use crate::styles::tokens::fictreon_dark;
-        chain_ui::style!(card_base {
+        style!(card_base {
             padding: fictreon_dark.spacing.sm;
             background: fictreon_dark.colors.surface;
             >.icon { margin_right: fictreon_dark.spacing.sm; }
@@ -35,8 +38,9 @@ mod styles {
     }
 
     pub mod button {
+        use chain_ui::prelude::*;
         use crate::styles::tokens::fictreon_dark;
-        chain_ui::style!(button {
+        style!(button {
             compose: card_base;
             padding: fictreon_dark.spacing.md;
             border_radius: fictreon_dark.radius.sm;
@@ -54,20 +58,21 @@ mod styles {
 
     /* ---------- claims ---------- */
     pub mod lab {
+        use chain_ui::prelude::*;
         use crate::styles::tokens::{bps, fictreon_dark};
 
-        chain_ui::style!(note {
+        style!(note {
             font: 12px/1.4 monospace;
             color: "#666";
             margin: 14px 0 4px;
         });
 
-        chain_ui::style!(box_outline {
+        style!(box_outline {
             border: 1px solid "#999";
             margin: 4px 0;
         });
 
-        chain_ui::style!(dashed {
+        style!(dashed {
             font-size: 17px;
             letter_spacing: 2px;
             --lab-size: 120px;
@@ -84,7 +89,7 @@ mod styles {
             @media "(max-width: 600px)" { --lab-size: 60px; }
         });
 
-        chain_ui::style!(natural {
+        style!(natural {
             --lab-accent: "#C8A45A";
             display: flex;
             justify-content: space-between;
@@ -116,7 +121,7 @@ mod styles {
             }
         });
 
-        chain_ui::style!(nested_css {
+        style!(nested_css {
             display: flex;
             .item {
                 css { -webkit-touch-callout: none; }
@@ -133,7 +138,7 @@ mod styles {
             selector ".nested_css .item:hover .desc" { css { -webkit-line-clamp: 5; } }
         });
 
-        chain_ui::style!(content_test {
+        style!(content_test {
             &::before {
                 content: "";
                 display: inline-block; width: 12px; height: 12px;
@@ -151,7 +156,7 @@ mod styles {
             .gone { &::after { content: none; } }
         });
 
-        chain_ui::style!(vars_test {
+        style!(vars_test {
             padding: 8px;
             color: var(--lab-accent);
             background: var(--lab-bg, red);
@@ -159,7 +164,7 @@ mod styles {
             width: calc(100% - var(--lab-gap, 8px));
         });
 
-        chain_ui::style!(func_test {
+        style!(func_test {
             height: 24px;
             background-image: linear-gradient(to right, "#e74c3c", "#3498db");
             transform: translate-y(-4px);
@@ -167,25 +172,25 @@ mod styles {
             margin-top: 8px;
         });
 
-        chain_ui::style!(hyphen_class {
+        style!(hyphen_class {
             color: "#ff0000";
             .my-class { color: "#C8A45A"; font-weight: bold; }
             > .direct-child { color: "#3498db"; font-weight: 700; }
         });
 
-        chain_ui::style!(bem {
+        style!(bem {
             display: block;
             &__title { color: "#e74c3c"; }
             &--active { color: "#2ecc71"; }
         });
 
-        chain_ui::style!(at_rules {
+        style!(at_rules {
             display: block;
             @supports "(display: grid)" { display: grid; }
             @container "(min-width: 400px)" { font-size: 19px; }
         });
 
-        chain_ui::style!(pill {
+        style!(pill {
             padding: 4px 10px;
             border-radius: 999px;
             variant tone {
@@ -196,7 +201,7 @@ mod styles {
         });
 
         // NEW: fallbacks, typed var, token-constant breakpoint, animation names, last `;` omitted
-        chain_ui::style!(dx_test {
+        style!(dx_test {
             width: first-that-works(fit-content, -moz-fit-content, 100%);
             padding: 8px 12px;
             color: var(fictreon_dark.colors.gold);
@@ -220,19 +225,20 @@ mod styles {
         });
 
         // NEW: the report must flag the first var and ignore the second (external_vars)
-        chain_ui::style!(lint_demo {
+        style!(lint_demo {
             color: var(--not-defined-anywhere);
             background: var(--set-by-css-var);
         });
     }
 
     pub mod theme {
+        use chain_ui::prelude::*;
         use super::button::Button;
         use super::card_base::CardBase;
         use super::lab::*;
         use crate::styles::tokens::{ThemeTokens, fictreon_dark};
 
-        chain_ui::global! {
+        global! {
             @media "(prefers-reduced-motion: reduce)" {
                 * { animation-duration: 0.001ms !important; }
             }
@@ -241,28 +247,28 @@ mod styles {
             body { margin: 0; font-family: system-ui, sans-serif; }
         }
 
-        chain_ui::keyframes!(lab_spin {
+        keyframes!(lab_spin {
             from { transform: "rotate(0deg)"; }
             to { transform: "rotate(360deg)"; }
         });
-        chain_ui::keyframes!(lab_pulse {
+        keyframes!(lab_pulse {
             0%, 100% { opacity: 1; }
             50% { opacity: 0.4; }
         });
-        chain_ui::keyframes!(lab_unused {
+        keyframes!(lab_unused {
             from { opacity: 0; }
             to { opacity: 1; }
         });
 
-        chain_ui::sprinkles!(fictreon_dark {
+        sprinkles!(fictreon_dark {
             padding: spacing { sm, md };
         });
 
-        chain_ui::theme_pack!(ember: ThemeTokens for "html.theme-ember" {
+        theme_pack!(ember: ThemeTokens for "html.theme-ember" {
             colors { gold: "#FF7A18" }
         });
 
-        chain_ui::theme!("lab" {
+        theme!("lab" {
             layers: base, components;
             external_vars: set_by_css_var;
 
@@ -308,12 +314,12 @@ fn test_page() -> Element {
             tag::head()
                 .child(tag::meta().attr("charset", "utf-8"))
                 .child(tag::meta().attr("name", "viewport").attr("content", "width=device-width, initial-scale=1"))
-                .child(tag::title().child("chain_ui_style lab v2"))
+                .child(tag::title().child("chain_ui lab v2"))
                 .child(styles::theme::lab_theme()),
         )
         .child(
             tag::body()
-                .child(tag::h3().child("chain_ui_style lab v2"))
+                .child(tag::h3().child("chain_ui lab v2"))
                 .child(n("/__check = PASS/FAIL, /__css = generated CSS, /__report = size + lint. Each box says what it should look like."))
                 // ---- packs
                 .child(n("theme packs: these buttons toggle classes on the root element. Watch the dx_test box below."))
@@ -591,7 +597,7 @@ async fn debug_page() -> impl IntoResponse {
 
 async fn debug_css() -> impl IntoResponse {
     let pretty = styles::theme::lab_css();
-    let minified = chain_ui::render::minify(pretty);
+    let minified = minify(pretty);
     (
         [(header::CONTENT_TYPE, "text/plain; charset=utf-8")],
         format!("--- as-served (debug_assertions = {}) ---\n{pretty}\n\n--- minified ---\n{minified}\n", cfg!(debug_assertions)),
@@ -624,7 +630,7 @@ async fn main() {
     let _ = styles::theme::lab_css(); // fail fast on compose cycles / unknown compose names
     let results = run_checks();
     let failed: Vec<_> = results.iter().filter(|r| !r.ok).collect();
-    println!("chain_ui_style lab v2: {}/{} checks passed", results.len() - failed.len(), results.len());
+    println!("chain_ui lab v2: {}/{} checks passed", results.len() - failed.len(), results.len());
     for r in &failed { println!("  FAIL {}  <-- {}", r.label, r.detail); }
 
     let app = Router::new()
